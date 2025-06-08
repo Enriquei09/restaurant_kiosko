@@ -33,7 +33,7 @@ class BuilCategoryCarousel extends StatelessWidget {
                 Container(
                   height: 140,
                   alignment: Alignment.topCenter,
-                  
+
                   child: Image.asset(
                     "assets/img_comida/comida_mexicana.jpg",
                     height: 140,
