@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:restaurant_kiosco/presentation/widgets/buil_category_carousel.dart';
+import 'package:restaurant_kiosco/presentation/widgets/build_cards_products.dart';
 import 'package:restaurant_kiosco/presentation/widgets/build_header.dart';
+//import 'package:restaurant_kiosco/presentation/widgets/card_category.dart';
 
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
@@ -15,8 +17,13 @@ class MenuScreen extends StatelessWidget {
             SliverToBoxAdapter(child: BuildHeader()),
 
             //Categorias
-            SliverToBoxAdapter(child: BuilCategoryCarousel())
-          ],
+            SliverToBoxAdapter(child: BuilCategoryCarousel()),
+            
+            
+
+            //PRODUCTS
+            SliverToBoxAdapter(child: BuildCardsProducts(category: 'Barbacoa'))
+          ]  
         )
       
       ),
