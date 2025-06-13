@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 class CardCategory extends StatelessWidget {
-
   final String imagePath; // ruta de la imagen
   final String nameCategory; // Nombre categoria
   final String subtitle;
@@ -9,7 +8,7 @@ class CardCategory extends StatelessWidget {
   const CardCategory({
     super.key,
     required this.imagePath,
-    this.nameCategory='',
+    this.nameCategory = '',
     this.subtitle = "",
   });
 
@@ -19,7 +18,7 @@ class CardCategory extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 4,
       //color: Colors.amber,
-      child: NewCard(imagePath: imagePath, nameCategory: nameCategory),      
+      child: NewCard(imagePath: imagePath, nameCategory: nameCategory),
     );
   }
 }
@@ -28,29 +27,21 @@ class NewCard extends StatelessWidget {
   final String imagePath;
   final String nameCategory;
 
-  const NewCard({
-    super.key,
-    required this.imagePath,
-    this.nameCategory='',
-  });
+  const NewCard({super.key, required this.imagePath, this.nameCategory = ''});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       //color: Colors.white,
       width: 100,
-      margin: EdgeInsets.only(left: 5.0,right: 5.0),
+      margin: EdgeInsets.only(left: 5.0, right: 5.0, ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 10,
-            spreadRadius: 2
-          )
-        ]
-      ) ,
+          BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2),
+        ],
+      ),
       child: SizedBox(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -88,8 +79,3 @@ class NewCard extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

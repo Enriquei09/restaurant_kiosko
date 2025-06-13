@@ -2,15 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:restaurant_kiosco/presentation/widgets/card_category.dart';
 
-
-
 //Contenedor del carrusel de categorias
 
 class BuilCategoryCarousel extends StatelessWidget {
-  final categorias = ['Platillo ','tortas','tortillas'];
-  
-
-  
+  final categorias = ['Platillo ', 'tortas', 'tortillas'];
 
   BuilCategoryCarousel({super.key});
 
@@ -30,11 +25,11 @@ class BuilCategoryCarousel extends StatelessWidget {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                
                 NewCard(
-                  imagePath:'assets/img_comida/comida_mexicana.jpg',
+                  imagePath: 'assets/img_comida/comida_mexicana.jpg',
                   nameCategory: categorias[index],
                 ),
-                
               ],
             );
           },
