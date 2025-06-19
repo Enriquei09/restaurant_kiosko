@@ -5,7 +5,7 @@ import 'package:restaurant_kiosco/presentation/widgets/card_category.dart';
 //Contenedor del carrusel de categorias
 
 class BuilCategoryCarousel extends StatelessWidget {
-  final categorias = ['Platillo ', 'tortas', 'tortillas'];
+  final categorias = ['Platillo ', 'tortas', 'tortillas','caldos','tortas', 'tortillas','caldos'];
 
   BuilCategoryCarousel({super.key});
 
