@@ -56,14 +56,14 @@ class CardProduct extends StatelessWidget {
                       nameProduct,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                        fontSize: 14,
                       ),
                     ),
                     Text(
                       '\$${priceProduct.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w500,
-                        fontSize: 16,
+                        fontSize: 14,
                       ),                    
                     ),
                   ],
