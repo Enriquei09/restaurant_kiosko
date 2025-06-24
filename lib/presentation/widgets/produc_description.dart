@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:restaurant_kiosco/presentation/widgets/larger_button.dart';
 import 'package:restaurant_kiosco/presentation/widgets/selerctor_items.dart';
 
 class ProductDescription extends StatelessWidget {
@@ -150,35 +151,35 @@ class InfoProductContainer extends StatelessWidget {
 //   }
 // }
 
-class LargeButton extends StatelessWidget {
-  final bool enabled;
-  const LargeButton({super.key, this.enabled = false});
-  @override
-  Widget build(BuildContext context) {
-    final VoidCallback? onPressed = enabled ? () {} : null;
+// class LargeButton extends StatelessWidget {
+//   final bool enabled;
+//   const LargeButton({super.key, this.enabled = false});
+//   @override
+//   Widget build(BuildContext context) {
+//     final VoidCallback? onPressed = enabled ? () {} : null;
 
-    return Center(
-      child: FilledButton(
-        onPressed: onPressed,
-        // style: FilledButton.styleFrom(
-        //   backgroundColor: const Color.fromARGB(255, 192, 31, 31),
-        //   foregroundColor: Colors.white,
-        //   padding: const EdgeInsets.symmetric(horizontal: 24)
-        // ),
-        style: ButtonStyle(
-          padding: WidgetStateProperty.all<EdgeInsetsGeometry>(
-            EdgeInsets.symmetric(horizontal: 80),
-          ),
-          backgroundColor: WidgetStateProperty.all<Color>(
-            const Color.fromARGB(255, 10, 10, 10),
-          ),
-          foregroundColor: WidgetStateProperty.all<Color>(Colors.white),
-        ),
-        child: Text("Agregar al Carrito"),
-      ),
-    );
-  }
-}
+//     return Center(
+//       child: FilledButton(
+//         onPressed: onPressed,
+//         // style: FilledButton.styleFrom(
+//         //   backgroundColor: const Color.fromARGB(255, 192, 31, 31),
+//         //   foregroundColor: Colors.white,
+//         //   padding: const EdgeInsets.symmetric(horizontal: 24)
+//         // ),
+//         style: ButtonStyle(
+//           padding: WidgetStateProperty.all<EdgeInsetsGeometry>(
+//             EdgeInsets.symmetric(horizontal: 80),
+//           ),
+//           backgroundColor: WidgetStateProperty.all<Color>(
+//             const Color.fromARGB(255, 10, 10, 10),
+//           ),
+//           foregroundColor: WidgetStateProperty.all<Color>(Colors.white),
+//         ),
+//         child: Text("Agregar al Carrito"),
+//       ),
+//     );
+//   }
+// }
 
 
 /*

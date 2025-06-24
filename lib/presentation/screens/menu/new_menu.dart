@@ -6,7 +6,10 @@ class NewMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(body: SafeArea(child: Text('Hello wordl')));
+    return Scaffold(
+      body: SafeArea(child: Center(child: Text("hello world"))),
+    );
   }
 }
+
 
