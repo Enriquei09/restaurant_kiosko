@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:restaurant_kiosco/models/product.dart';
 import 'package:restaurant_kiosco/presentation/widgets/card_product.dart';
 
 class BuildCardsProducts extends StatelessWidget {
   final String category;
+  final List<Product> products;
 
-  const BuildCardsProducts({super.key, required this.category});
+  const BuildCardsProducts({super.key, required this.category, required this.products});
 
   @override
   Widget build(BuildContext context) {
@@ -29,29 +31,17 @@ class BuildCardsProducts extends StatelessWidget {
           SizedBox(
             height: 200,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CardProduct(
-                  imagePath: 'assets/products_img/sopes.jpg',
-                  nameProduct: 'Sopes',
-                ),
-                CardProduct(
-                  imagePath: 'assets/products_img/sopes.jpg',
-                  nameProduct: 'Sopes',
-                ),
-                CardProduct(
-                  imagePath: 'assets/products_img/sopes.jpg',
-                  nameProduct: 'Sopes',
-                ),
-                CardProduct(
-                  imagePath: 'assets/products_img/sopes.jpg',
-                  nameProduct: 'Sopes',
-                ),
-                CardProduct(
-                  imagePath: 'assets/products_img/sopes.jpg',
-                  nameProduct: 'Sopes',
-                ),
-              ],
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: products.map((Product){
+                return CardProduct(
+                  imagePath: Product.imagePath,
+                  nameProduct: Product.name,
+                  priceProduct: Product.price,
+
+                );
+
+              }
+              ).toList(),
             )
           ),
           

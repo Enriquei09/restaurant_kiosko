@@ -4,21 +4,27 @@ class CardCategory extends StatelessWidget {
   final String imagePath; // ruta de la imagen
   final String nameCategory; // Nombre categoria
   final String subtitle;
+  final VoidCallback? onTap;
 
   const CardCategory({
     super.key,
     required this.imagePath,
     this.nameCategory = '',
     this.subtitle = "",
+     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return GestureDetector(
+      onTap: onTap,
+      child:Card(
+     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 4,
       //color: Colors.amber,
       child: NewCard(imagePath: imagePath, nameCategory: nameCategory),
+      )
+ 
     );
   }
 }
@@ -67,7 +73,7 @@ class NewCard extends StatelessWidget {
                     nameCategory,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 9,
                     ),
                   ),
                 ],
