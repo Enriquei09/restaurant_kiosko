@@ -29,23 +29,23 @@ class Product {
     required this.updatedAt,
   });
 
-factory Product.fromJson(Map<String, dynamic> json) {
-  return Product(
-    id: json['id'],
-    name: json['name']?.toString() ?? 'Producto sin nombre',
-    price: double.tryParse(json['price'].toString()) ?? 0.0,
-    categoryId: json['category_id'],
-    productGroupId: json['product_group_id'],
-    description: json['description']?.toString() ?? '',
-    color: json['color']?.toString() ?? '',
-    imagePath: json['image_path']?.toString() ?? 'assets/img_comida/comida_mexicana.jpg',
-    active: json['active'] ?? true,
-    outOfStock: json['out_of_stock'] ?? false,
-    imageSynced: json['image_synced'] ?? false,
-    createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
-    updatedAt: DateTime.tryParse(json['updated_at'] ?? '') ?? DateTime.now(),
-  );
-}
+  factory Product.fromJson(Map<String, dynamic> json) {
+    return Product(
+      id: json['id'],
+      name: json['name']?.toString() ?? 'Producto sin nombre',
+      price: double.tryParse(json['price'].toString()) ?? 0.0,
+      categoryId: json['category_id'],
+      productGroupId: json['product_group_id'],
+      description: json['description']?.toString() ?? '',
+      color: json['color']?.toString() ?? '',
+      imagePath: json['image_path']?.toString() ?? 'assets/img_comida/comida_mexicana.jpg',
+      active: json['active'] ?? true,
+      outOfStock: json['out_of_stock'] ?? false,
+      imageSynced: json['image_synced'] ?? false,
+      createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updated_at'] ?? '') ?? DateTime.now(),
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {

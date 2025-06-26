@@ -52,7 +52,7 @@ class _BuildCategoryCarouselState extends State<BuildCategoryCarousel> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     CardCategory(
-                      imagePath: categoria.imagePath ?? '',
+                      imagePath: categoria.imagePath ,
                       nameCategory: categoria.name,
                       onTap: () => widget.onCategoryTap(categoria.id),
 

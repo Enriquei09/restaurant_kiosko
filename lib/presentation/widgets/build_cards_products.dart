@@ -32,11 +32,11 @@ class BuildCardsProducts extends StatelessWidget {
             height: 200,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.start,
-              children: products.map((Product){
+              children: products.map((product){
                 return CardProduct(
-                  imagePath: Product.imagePath,
-                  nameProduct: Product.name,
-                  priceProduct: Product.price,
+                  imagePath: product.imagePath,
+                  nameProduct: product.name,
+                  priceProduct: product.price,
 
                 );
 

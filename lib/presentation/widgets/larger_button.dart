@@ -36,9 +36,20 @@ class DialogHelper {
       context: context,
       builder: (BuildContext context) {
 
-        Future.delayed(const Duration(seconds: 2), () {
-          Navigator.of(context).pop();
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await Future.delayed(const Duration(seconds: 2));
+          
+          if (Navigator.canPop(context)) {
+            Navigator.of(context).pop();
+          }
         });
+
+        // Future.delayed(const Duration(seconds: 2), () {
+
+        //   if(Navigator.canPop(context)){
+        //     Navigator.of(context).pop();
+        //   }
+        // });
 
         return AlertDialog(
           icon: Icon(Icons.check_circle, color: Colors.green, size: 80.0),

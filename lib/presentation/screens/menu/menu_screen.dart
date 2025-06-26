@@ -27,16 +27,35 @@ class _MenuScreenState extends State<MenuScreen> {
     try {
       final Category categoryDetail = await ApiService.fetchCategoryWithProducts(categoryId);
 
+      if (!mounted) return;
+
       setState(() {
         selectedCategoryName = categoryDetail.name;
         productGroups = categoryDetail.productGroups;
       });
     } catch (e) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al cargar productos')),
+        const SnackBar(content: Text('Error al cargar productos')),
       );
     }
   }
+
+  // void loadCategory(int categoryId) async {
+  //   try {
+  //     final Category categoryDetail = await ApiService.fetchCategoryWithProducts(categoryId);
+
+  //     setState(() {
+  //       selectedCategoryName = categoryDetail.name;
+  //       productGroups = categoryDetail.productGroups;
+  //     });
+  //   } catch (e) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Error al cargar productos')),
+  //     );
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +81,7 @@ class _MenuScreenState extends State<MenuScreen> {
                   products: group.products,
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

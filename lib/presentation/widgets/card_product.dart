@@ -23,85 +23,29 @@ class CardProduct extends StatelessWidget {
           context: context,
           barrierDismissible: true,
           barrierColor: Colors.black38,
-          builder: (BuildContext contex) {
-            
-            return ProductDescription();
+          builder: (BuildContext context) {
+            return const ProductDescription(); // asegúrate de tener esta clase
           },
         );
       },
       child: Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 4,
-        margin: EdgeInsets.only(left: 10.0, right: 10.0),
-
+        margin: const EdgeInsets.symmetric(horizontal: 10.0),
         child: Container(
           width: 200,
-          //
           decoration: BoxDecoration(
             color: const Color.fromARGB(255, 253, 252, 252),
             borderRadius: BorderRadius.circular(12),
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2),
             ],
           ),
-          child: SizedBox(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(12),
-                  ),
-                  child: Image.asset(
-                    imagePath,
-                    height: 130,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    //crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        nameProduct,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      Text(
-                        '\$${priceProduct.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-      child: Container(
-        width: 200,
-        //
-        decoration: BoxDecoration(
-          color: const Color.fromARGB(255, 253, 252, 252),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2),
-          ],
-        ),
-        child: SizedBox(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(12),
-                ),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                 child: Image.asset(
                   imagePath,
                   height: 130,
@@ -112,10 +56,9 @@ class CardProduct extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Row(
-                  //crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text( 
+                    Text(
                       nameProduct,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
@@ -127,11 +70,10 @@ class CardProduct extends StatelessWidget {
                       style: const TextStyle(
                         fontWeight: FontWeight.w500,
                         fontSize: 14,
-                      ),                    
+                      ),
                     ),
                   ],
                 ),
-
               )
             ],
           ),

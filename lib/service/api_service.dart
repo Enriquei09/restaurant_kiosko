@@ -12,7 +12,7 @@ class ApiService {
     if (response.statusCode == 200) {
       final List<dynamic> jsonList = jsonDecode(response.body);
       return jsonList.map((json) => Category.fromJson(json)).toList();
-    } else {
+    } else { 
       throw Exception('Error al cargar las categorías');
     }
   }
