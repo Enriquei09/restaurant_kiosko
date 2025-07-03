@@ -33,7 +33,7 @@ class CardProduct extends StatelessWidget {
         elevation: 4,
         margin: const EdgeInsets.symmetric(horizontal: 10.0),
         child: Container(
-          width: 200,
+          width: 210,
           decoration: BoxDecoration(
             color: const Color.fromARGB(255, 253, 252, 252),
             borderRadius: BorderRadius.circular(12),
@@ -45,7 +45,9 @@ class CardProduct extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
                 child: Image.asset(
                   imagePath,
                   height: 130,
@@ -58,12 +60,17 @@ class CardProduct extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      nameProduct,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                    Flexible(
+                      child: Text(
+                        nameProduct,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        softWrap: true,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      
                     ),
                     Text(
                       '\$${priceProduct.toStringAsFixed(2)}',
@@ -74,7 +81,7 @@ class CardProduct extends StatelessWidget {
                     ),
                   ],
                 ),
-              )
+              ),
             ],
           ),
         ),
@@ -82,4 +89,3 @@ class CardProduct extends StatelessWidget {
     );
   }
 }
-

@@ -12,7 +12,6 @@ class BuildCategoryCarousel extends StatefulWidget {
   State<BuildCategoryCarousel> createState() => _BuildCategoryCarouselState();
 }
 
-
 class _BuildCategoryCarouselState extends State<BuildCategoryCarousel> {
   late Future<List<Category>> futureCategories;
 
@@ -52,10 +51,9 @@ class _BuildCategoryCarouselState extends State<BuildCategoryCarousel> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     CardCategory(
-                      imagePath: categoria.imagePath ,
+                      imagePath: categoria.imagePath,
                       nameCategory: categoria.name,
                       onTap: () => widget.onCategoryTap(categoria.id),
-
                     ),
                   ],
                 );

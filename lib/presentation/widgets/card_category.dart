@@ -11,20 +11,19 @@ class CardCategory extends StatelessWidget {
     required this.imagePath,
     this.nameCategory = '',
     this.subtitle = "",
-     this.onTap,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child:Card(
-     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 4,
-      //color: Colors.amber,
-      child: NewCard(imagePath: imagePath, nameCategory: nameCategory),
-      )
- 
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 4,
+        //color: Colors.amber,
+        child: NewCard(imagePath: imagePath, nameCategory: nameCategory),
+      ),
     );
   }
 }
@@ -39,14 +38,14 @@ class NewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       //color: Colors.white,
-      width: 100,
-      margin: EdgeInsets.only(left: 5.0, right: 5.0, ),
+      width: 110,
+      // margin: EdgeInsets.only(left: 5.0, right: 5.0),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2),
-        ],
+        // boxShadow: [
+        //   BoxShadow(color: const Color.fromARGB(228, 221, 25, 25), blurRadius: 10, spreadRadius: 2),
+        // ],
       ),
       child: SizedBox(
         child: Column(

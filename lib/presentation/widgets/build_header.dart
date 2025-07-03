@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:restaurant_kiosco/presentation/widgets/button_icon.dart';
 
 class BuildHeader extends StatelessWidget {
   const BuildHeader({super.key});
@@ -26,14 +27,15 @@ class BuildHeader extends StatelessWidget {
             const Spacer(),
             Image.asset('assets/img_comida/Img_logo2.png', height: 80),
             const Spacer(),
-            ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Orden'),
-            ),
+            // ElevatedButton(
+            //   onPressed: () {},
+            //   style: ElevatedButton.styleFrom(
+            //     backgroundColor: Colors.purple,
+            //     foregroundColor: Colors.white,
+            //   ),
+            //   child: const Text('Orden'),
+            // ),
+            ButtonIcon(),
             const SizedBox(width: 12),
             const Icon(Icons.person_3_outlined),
           ],

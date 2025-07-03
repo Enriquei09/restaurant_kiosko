@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+//import 'package:restaurant_kiosco/presentation/widgets/button_icon.dart';
+import 'package:restaurant_kiosco/presentation/widgets/products_selected.dart';
 //import 'package:restaurant_kiosco/presentation/widgets/selerctor_items.dart';
 
 class NewMenu extends StatelessWidget {
@@ -7,7 +9,10 @@ class NewMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(child: Center(child: Text("hello world"))),
+      body: SafeArea(child: Center(
+        // child:ButtonIcon() 
+        child:ProductsSelected()
+      )),
     );
   }
 }
