@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:restaurant_kiosco/models/modifiers.dart';
 import '../models/category.dart';
 import '../constants.dart';
+
 
 class ApiService {
 
@@ -27,5 +29,20 @@ class ApiService {
     } else {
       throw Exception('Error al cargar la categoría con productos');
     }
+  }
+
+  static Future<List<ModifierGroup>> fetchModifierGroups(int productId) async {
+    final url = Uri.parse('$baseUrl/products/$productId/modifiers/grouped');
+    final res = await http.get(
+      url,
+      headers: {'Accept': 'application/json'},
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception('Error ${res.statusCode}: ${res.body}');
+    }
+
+    final List data = jsonDecode(res.body);
+    return data.map((g) => ModifierGroup.fromJson(g)).toList();
   }
 }

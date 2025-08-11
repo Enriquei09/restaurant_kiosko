@@ -1,9 +1,13 @@
+// produc_description.dart
 import 'package:flutter/material.dart';
+import 'package:restaurant_kiosco/models/product.dart';
 import 'package:restaurant_kiosco/presentation/widgets/larger_button.dart';
-import 'package:restaurant_kiosco/presentation/widgets/selerctor_items.dart';
+import 'package:restaurant_kiosco/presentation/widgets/selerctor_items.dart'; // ExtraSelector
 
 class ProductDescription extends StatelessWidget {
-  const ProductDescription({super.key});
+  const ProductDescription({super.key, required this.product});
+
+  final Product product;
 
   @override
   Widget build(BuildContext context) {
@@ -21,12 +25,17 @@ class ProductDescription extends StatelessWidget {
             children: [
               const IconsViewCard(),
               Expanded(
-                child: Row(children: [ImageContainer(), InfoProductContainer()]),
+                child: Row(
+                  children: [
+                    ImageContainer(imagePath: product.imagePath),
+                    InfoProductContainer(product: product),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-      )
+      ),
     );
   }
 }
@@ -40,23 +49,16 @@ class IconsViewCard extends StatelessWidget {
       width: 750,
       height: 50,
       child: Container(
-        padding: EdgeInsets.all(10),
-        decoration: BoxDecoration(
+        padding: const EdgeInsets.all(10),
+        decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(10),
-            topRight: Radius.circular(10),
-          ),
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
         ),
-
         child: Row(
           children: [
             IconButton(
               icon: const Icon(Icons.close),
-              onPressed: () {
-                Navigator.of(context).pop();
-                //print('Cuadro de Dialogo Cerrado');
-              },
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ],
         ),
@@ -66,21 +68,26 @@ class IconsViewCard extends StatelessWidget {
 }
 
 class ImageContainer extends StatelessWidget {
-  const ImageContainer({super.key});
+  const ImageContainer({super.key, required this.imagePath});
+  final String imagePath;
 
   @override
   Widget build(BuildContext context) {
+    final isNetwork = imagePath.startsWith('http');
     return Container(
-      padding: EdgeInsets.all(10),
-      decoration: BoxDecoration(color: Colors.white),
+      padding: const EdgeInsets.all(10),
+      decoration: const BoxDecoration(color: Colors.white),
       alignment: Alignment.topCenter,
-      child: Image.asset('assets/products_img/sopes.jpg', width: 280),
+      child: isNetwork
+          ? Image.network(imagePath, width: 280, fit: BoxFit.cover)
+          : Image.asset(imagePath, width: 280, fit: BoxFit.cover),
     );
   }
 }
 
 class InfoProductContainer extends StatelessWidget {
-  const InfoProductContainer({super.key});
+  const InfoProductContainer({super.key, required this.product});
+  final Product product;
 
   @override
   Widget build(BuildContext context) {
@@ -91,21 +98,23 @@ class InfoProductContainer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Sopes de Chorizo',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+          Text(product.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           Text(
-            'Description',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w300),
+            (product.description.isEmpty ? 'Description' : product.description),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w300),
           ),
           const Divider(height: 32),
           SizedBox(
             height: 250,
-            child: SingleChildScrollView(child: ExtraSelector()),
+            child: SingleChildScrollView(
+              child: ExtraSelector(
+                key: ValueKey(product.id), // fuerza rebuild entre productos
+                productId: product.id,     // 🔑 para traer modificadores 
+              ),
+            ),
           ),
           const Divider(height: 32),
-          LargeButton(),
+          const LargeButton(),
         ],
       ),
     );
