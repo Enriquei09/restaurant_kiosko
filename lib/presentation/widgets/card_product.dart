@@ -54,7 +54,7 @@ class _ProductMiniCard extends StatelessWidget {
     final bool isNetwork = imagePath.startsWith('http');
 
     return Container(
-      width: 110, // igual que CardCategory
+      width: 110, 
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -84,7 +84,6 @@ class _ProductMiniCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Título (mismo estilo)
                   Text(
                     title,
                     maxLines: 2,

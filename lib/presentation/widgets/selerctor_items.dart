@@ -2,13 +2,44 @@ import 'package:flutter/material.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/models/modifiers.dart';
 
+/// Selector de extras/modificadores para un producto.
+/// - Carga los grupos desde la API: radios y checkboxes.
+/// - Expone callbacks para: IDs seleccionados, labels, cantidad y nota.
+/// - Muestra controles de Cantidad y Nota al final (siempre, aunque no haya grupos).
 class ExtraSelector extends StatefulWidget {
   const ExtraSelector({
     super.key,
     required this.productId,
+    this.onChanged,         // IDs (modifiers) seleccionados
+    this.onLabelsChanged,   // Nombres/labels seleccionados
+    this.onQtyChanged,      // Cantidad
+    this.onNoteChanged,     // Nota
+    this.initialQty = 1,
+    this.initialNote,
+     this.initialSelectedIds = const [],
   });
 
+  /// ID del producto para consultar sus grupos de modificadores
   final int productId;
+
+  /// Callback: lista de IDs seleccionados (radios + checks)
+  final ValueChanged<List<int>>? onChanged;
+
+  /// Callback: labels amigables de los seleccionados (radios + checks)
+  final ValueChanged<List<String>>? onLabelsChanged;
+
+  /// Callback: cantidad elegida
+  final ValueChanged<int>? onQtyChanged;
+
+  /// Callback: nota (null si vacío)
+  final ValueChanged<String?>? onNoteChanged;
+
+  /// Valor inicial de cantidad
+  final int initialQty;
+
+  /// Valor inicial de nota
+  final String? initialNote;
+  final List<int> initialSelectedIds; 
 
   @override
   State<ExtraSelector> createState() => _ExtraSelectorState();
@@ -18,26 +49,40 @@ class _ExtraSelectorState extends State<ExtraSelector> {
   bool _loading = true;
   String? _error;
 
-  // Todos los grupos devueltos por la API
+  // Grupos devueltos por la API
   List<ModifierGroup> _groups = [];
 
   // Estado de selección por grupo
-  final Map<int, int?> _radioSelectedByGroup = {};     // groupIndex -> optionId
-  final Map<int, Set<int>> _checkSelectedByGroup = {}; // groupIndex -> {optionIds}
+  final Map<int, int?> _radioSelectedByGroup = {};      // groupIndex -> optionId
+  final Map<int, Set<int>> _checkSelectedByGroup = {};  // groupIndex -> {optionIds}
+
+  // Cantidad y nota locales
+  late int _qty;
+  late TextEditingController _noteCtrl;
 
   @override
   void initState() {
     super.initState();
+    _qty = widget.initialQty;
+    _noteCtrl = TextEditingController(text: widget.initialNote ?? '');
     _loadFromApi();
   }
 
-  // Importante: recargar si cambia el producto
+  // Recarga si cambia el producto (y reinicia qty/nota a los valores iniciales)
   @override
   void didUpdateWidget(covariant ExtraSelector oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.productId != widget.productId) {
+      _qty = widget.initialQty;
+      _noteCtrl.text = widget.initialNote ?? '';
       _loadFromApi();
     }
+  }
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadFromApi() async {
@@ -51,13 +96,11 @@ class _ExtraSelectorState extends State<ExtraSelector> {
 
     try {
       final groups = await ApiService.fetchModifierGroups(widget.productId);
-      debugPrint('Grupos recibidos: ${groups.length}');
-
-      // Inicializa estado según el tipo de grupo
+      // Inicializa estructuras de selección por tipo
       for (int i = 0; i < groups.length; i++) {
         final g = groups[i];
         if (g.selectionType == SelectionType.radio) {
-          _radioSelectedByGroup[i] = null;
+          _radioSelectedByGroup[i] = null; // o un default si aplica
         } else {
           _checkSelectedByGroup[i] = <int>{};
         }
@@ -67,12 +110,91 @@ class _ExtraSelectorState extends State<ExtraSelector> {
         _groups = groups;
         _loading = false;
       });
+
+      // Preseleccionar ids recibidos
+      final init = widget.initialSelectedIds.toSet();
+      for (int i = 0; i < _groups.length; i++) {
+      final g = _groups[i];
+      if (g.selectionType == SelectionType.radio) {
+       int? chosen;
+       for (final m in g.modifiers) {
+      if (init.contains(m.id)) { chosen = m.id; break; }
+          }
+        _radioSelectedByGroup[i] = chosen;
+      } else {
+     final set = <int>{};
+     for (final m in g.modifiers) {
+      if (init.contains(m.id)) set.add(m.id);
+        }
+     _checkSelectedByGroup[i] = set;
+       }
+      }
+
+// Emitir estado inicial
+_emitSelected();
+widget.onQtyChanged?.call(_qty);
+widget.onNoteChanged?.call(_noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim());
+
+
+      // Notificar estado inicial a quien escucha
+      _emitSelected();
+      widget.onQtyChanged?.call(_qty);
+      widget.onNoteChanged?.call(_normalizedNote());
     } catch (e) {
-      debugPrint('ERROR _loadFromApi: $e');
       setState(() {
         _loading = false;
         _error = e.toString();
       });
+    }
+  }
+
+  // Junta radios + checks y emite IDs + labels
+  void _emitSelected() {
+    final List<int> selected = [];
+
+    // Radios
+    _radioSelectedByGroup.forEach((_, optId) {
+      if (optId != null) selected.add(optId);
+    });
+
+    // Checks
+    _checkSelectedByGroup.forEach((_, set) {
+      selected.addAll(set);
+    });
+
+    // Emitir IDs
+    widget.onChanged?.call(selected);
+
+    // Calcular labels a partir de los IDs
+    String? _labelForId(int id) {
+      for (final g in _groups) {
+        for (final m in g.modifiers) {
+          if (m.id == id) return m.name;
+        }
+      }
+      return null;
+    }
+
+    final labels = selected.map(_labelForId).whereType<String>().toList();
+    widget.onLabelsChanged?.call(labels);
+  }
+
+  String? _normalizedNote() {
+    final t = _noteCtrl.text.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  void _incQty() {
+    if (_qty < 100) {
+      setState(() => _qty++);
+      widget.onQtyChanged?.call(_qty);
+    }
+  }
+
+  void _decQty() {
+    if (_qty > 1) {
+      setState(() => _qty--);
+      widget.onQtyChanged?.call(_qty);
     }
   }
 
@@ -84,15 +206,22 @@ class _ExtraSelectorState extends State<ExtraSelector> {
         child: LinearProgressIndicator(),
       );
     }
+
     if (_error != null) {
       return Padding(
         padding: const EdgeInsets.all(16),
         child: Text('No se pudieron cargar opciones.\n$_error'),
       );
     }
-    if (_groups.isEmpty) return const SizedBox.shrink();
 
-    // === MISMA UI, pero para TODOS los grupos ===
+    // Si no hay grupos, aún mostramos cantidad y nota
+    if (_groups.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: _qtyNoteSection(),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -100,11 +229,12 @@ class _ExtraSelectorState extends State<ExtraSelector> {
         children: [
           for (int gi = 0; gi < _groups.length; gi++) ...[
             Text(
-              _groups[gi].type, // título viene del backend
+              _groups[gi].type, // título del grupo (viene del backend)
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
 
+            // Radios
             if (_groups[gi].selectionType == SelectionType.radio)
               ..._groups[gi].modifiers.map((m) {
                 return RadioListTile<int>(
@@ -112,9 +242,14 @@ class _ExtraSelectorState extends State<ExtraSelector> {
                   value: m.id,
                   groupValue: _radioSelectedByGroup[gi],
                   activeColor: Colors.redAccent,
-                  onChanged: (v) => setState(() => _radioSelectedByGroup[gi] = v),
+                  onChanged: (v) => setState(() {
+                    _radioSelectedByGroup[gi] = v;
+                    _emitSelected();
+                  }),
                 );
               })
+
+            // Checkboxes
             else
               ..._groups[gi].modifiers.map((m) {
                 final set = _checkSelectedByGroup[gi]!;
@@ -124,16 +259,63 @@ class _ExtraSelectorState extends State<ExtraSelector> {
                   value: checked,
                   activeColor: Colors.green,
                   onChanged: (v) => setState(() {
-                    if (v == true) set.add(m.id);
-                    else set.remove(m.id);
+                    if (v == true) {
+                      set.add(m.id);
+                    } else {
+                      set.remove(m.id);
+                    }
+                    _emitSelected();
                   }),
                 );
               }),
 
-            const Divider(height: 32),
+            const Divider(height: 24),
           ],
+
+          // Controles de cantidad y nota
+          _qtyNoteSection(),
         ],
       ),
+    );
+  }
+
+  /// Sección final con controles de Cantidad y Nota
+  Widget _qtyNoteSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Cantidad
+        Row(
+          children: [
+            const Text('Cantidad:', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(width: 12),
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline),
+              onPressed: _decQty,
+              tooltip: 'Disminuir',
+            ),
+            Text('$_qty', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              onPressed: _incQty,
+              tooltip: 'Aumentar',
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Nota
+        TextField(
+          controller: _noteCtrl,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            labelText: 'Nota (opcional)',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: (_) => widget.onNoteChanged?.call(_normalizedNote()),
+        ),
+      ],
     );
   }
 }

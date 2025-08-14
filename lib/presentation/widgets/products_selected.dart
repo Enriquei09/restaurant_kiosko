@@ -1,63 +1,99 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:restaurant_kiosco/providers/cart_model.dart';
+import 'package:restaurant_kiosco/presentation/widgets/edit_cart_item_dialog.dart';
 
 class ProductsSelected extends StatelessWidget {
   const ProductsSelected({super.key});
 
+  /// Helper para abrir el modal permitiendo cerrar tocando afuera.
+  static Future<void> show(BuildContext context) {
+    return showDialog(
+      context: context,
+      barrierDismissible: true, // tap fuera del modal = cerrar
+      builder: (_) => const ProductsSelected(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final cart = context.watch<CartModel>();
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: SizedBox(
-        width: 400,
+        width: 420,
         height: 700,
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                "Productos Seleccionados",
-                style: TextStyle(
-                  fontSize: 20,
-                  color: const Color.fromARGB(255, 19, 3, 22),
-                ),
-              ),
-            ),
-            Divider(height: 1),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.all(5),
-                children: [                  
-                  NewCardProductSelected(impProduct: "assets/products_img/sopes.jpg", product: "Sopes", priceProduct: "45.44"),
-                  NewCardProductSelected(impProduct: "assets/products_img/sopes.jpg", product: "Sopes", priceProduct: "45.44"),
-                  NewCardProductSelected(impProduct: "assets/products_img/sopes.jpg", product: "Sopes", priceProduct: "45.44")
+            // Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Productos Seleccionados',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
                 ],
               ),
             ),
-            Divider(height: 1),
+            const Divider(height: 1),
+
+            // Lista del carrito
+            Expanded(
+              child: cart.items.isEmpty
+                  ? const Center(child: Text('Tu carrito está vacío'))
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: cart.items.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 6),
+                      itemBuilder: (_, i) => _CartRow(index: i),
+                    ),
+            ),
+
+            const Divider(height: 1),
+
+            // Totales + acciones
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
-                spacing: 10.0,
                 children: [
+                  _total('Subtotal', cart.subtotal),
+                  _total('IVA (16%)', cart.tax),
+                  _total('Total', cart.total, bold: true),
+                  const SizedBox(height: 12),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [Text("Total"), Text("\$45.00")],
-                  ),
-                  Center(
-                    child: Column(
-                      spacing: 10.0,
-                      //mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        ElevatedButton(
-                          onPressed: () {},
-                          child: Text("Confirmar"),
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: cart.items.isEmpty
+                              ? null
+                              : () {
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Listo para pagar')),
+                                  );
+                                  // TODO: integra checkout a Laravel
+                                },
+                          child: const Text('Confirmar'),
                         ),
-                        ElevatedButton(
-                          onPressed: () {},
-                          child: Text("Cancelar"),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancelar'),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -67,152 +103,166 @@ class ProductsSelected extends StatelessWidget {
       ),
     );
   }
+
+  Widget _total(String label, double value, {bool bold = false}) {
+    final style = bold ? const TextStyle(fontWeight: FontWeight.w700) : null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: style),
+          Text('\$${value.toStringAsFixed(2)}', style: style),
+        ],
+      ),
+    );
+  }
 }
 
-// widget de listview para productos seleccionados
-/*-------------------------------------------------------------------*/
-
-class NewCardProductSelected extends StatefulWidget {
-  final String impProduct;
-  final String product;
-  final String priceProduct;
-
-  const NewCardProductSelected({
-    super.key,
-    required this.impProduct,
-    required this.product,
-    required this.priceProduct,
-  });
+// ──────────────────────────────────────────────────────────────────────────────
+// Item del carrito: tap o botón "Editar" → abre el selector
+// ──────────────────────────────────────────────────────────────────────────────
+class _CartRow extends StatefulWidget {
+  final int index;
+  const _CartRow({required this.index});
 
   @override
-  State<NewCardProductSelected> createState() => _ListTitleProductState();
+  State<_CartRow> createState() => _CartRowState();
 }
 
-class _ListTitleProductState extends State<NewCardProductSelected> {
-  int quantity = 1;
-  bool isEditing = false;
+class _CartRowState extends State<_CartRow> {
   late TextEditingController _controller;
+  bool isEditingQty = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: quantity.toString());
+    final cart = context.read<CartModel>();
+    _controller = TextEditingController(text: cart.items[widget.index].qty.toString());
   }
 
-  void _saveQuantity() {
-    final newQuantity = int.tryParse(_controller.text);
-    if (newQuantity != null && newQuantity >= 0 && newQuantity <= 100) {
-      setState(() {
-        quantity = newQuantity;
-        isEditing = false;
-      });
-    }
-  }
-
-  void _increaseQuantity() {
-    if (quantity < 100) {
-      setState(() {
-        quantity++;
-        _controller.text = quantity.toString();
-      });
-    }
-  }
-
-  void _decreaseQuantity() {
-    if (quantity > 0) {
-      setState(() {
-        quantity--;
-        _controller.text = quantity.toString();
-      });
+  @override
+  void didUpdateWidget(covariant _CartRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final cart = context.read<CartModel>();
+    if (widget.index < cart.items.length) {
+      _controller.text = cart.items[widget.index].qty.toString();
     }
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _saveQty() {
+    final cart = context.read<CartModel>();
+    final n = int.tryParse(_controller.text);
+    if (n == null || n < 0 || n > 100) return;
+    cart.setQty(widget.index, n);
+    setState(() => isEditingQty = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                // IconButton(
-                //   icon: const Icon(Icons.close, color: Colors.red),
-                //   onPressed: () {
-                //     // lógica para eliminar
-                //   },
-                // ),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.asset(
-                    widget.impProduct,
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.cover,
+    final cart = context.watch<CartModel>();
+    final it = cart.items[widget.index];
+
+    Widget _image() {
+      final path = it.imagePath;
+      if (path == null || path.isEmpty) {
+        return Container(
+          width: 50, height: 50,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.fastfood),
+        );
+      }
+      final isNetwork = path.startsWith('http');
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: isNetwork
+            ? Image.network(path, width: 50, height: 50, fit: BoxFit.cover)
+            : Image.asset(path, width: 50, height: 50, fit: BoxFit.cover),
+      );
+    }
+
+    // 👉 Toda la tarjeta es "clickeable" para abrir el editor
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => EditCartItemDialog.show(context, index: widget.index),
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(10.0),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  _image(),
+                  const SizedBox(width: 10),
+
+                  // Nombre + precio
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(it.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text('\$${it.unitPrice.toStringAsFixed(2)} c/u'),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(widget.product, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text("\$ ${widget.priceProduct}"),
-                    ],
+
+                  if (!isEditingQty) Text('x ${it.qty}'),
+                  const SizedBox(width: 10),
+
+                  // Botón Editar: también abre el selector
+                  OutlinedButton(
+                    onPressed: () => EditCartItemDialog.show(context, index: widget.index),
+                    child: const Text('Editar'),
                   ),
-                ),
-                if (!isEditing) Text("x $quantity"),
-                const SizedBox(width: 10),
-                OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      isEditing = !isEditing;
-                      _controller.text = quantity.toString();
-                    });
-                  },
-                  child: Text(isEditing ? "Guardar" : "Editar"),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => cart.removeAt(widget.index),
+                    tooltip: 'Eliminar',
+                  ),
+                ],
+              ),
+
+              // Modificadores (labels)
+              if (it.modifierLabels.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: -6,
+                    children: it.modifierLabels
+                        .map((lbl) => Chip(
+                              label: Text(lbl),
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ))
+                        .toList(),
+                  ),
                 ),
               ],
-            ),
 
-            // Sección de edición si está activo
-            if (isEditing)
-              Padding(
-                padding: const EdgeInsets.only(top: 6.0),
-                child: Row(
+              // Nota
+              if (it.note != null && it.note!.trim().isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Cantidad: "),
-                    IconButton(
-                      icon: const Icon(Icons.remove),
-                      onPressed: _decreaseQuantity,
-                    ),
-                    SizedBox(
-                      width: 50,
-                      child: TextField(
-                        controller: _controller,
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                        ),
-                        onSubmitted: (_) => _saveQuantity(),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add),
-                      onPressed: _increaseQuantity,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.check, color: Colors.green),
-                      onPressed: _saveQuantity,
-                    ),
+                    const Icon(Icons.note_alt_outlined, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(it.note!, style: const TextStyle(fontSize: 12))),
                   ],
                 ),
-              ),
-          ],
+              ],
+            ],
+          ),
         ),
       ),
     );

@@ -1,66 +1,79 @@
+// presentation/widgets/large_button.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:restaurant_kiosco/providers/cart_model.dart';
+import 'package:restaurant_kiosco/models/cart_item.dart';
+import 'package:restaurant_kiosco/presentation/widgets/products_selected.dart';
 
 class LargeButton extends StatelessWidget {
-  final bool enabled;
-  const LargeButton({super.key, this.enabled = false});
+  final int productId;
+  final String name;
+  final double price;
+  final List<int> modifierIds;
+   final List<String> modifierLabels;
+  final String? note;
+  final String? imagePath;
+  final int qty;
+  final bool openCartAfterAdd;
+   final bool closeCurrentDialog; 
+
+  const LargeButton({
+    super.key,
+    required this.productId,
+    required this.name,
+    required this.price,
+    this.modifierIds = const [],
+     this.modifierLabels = const [], 
+    this.note,
+    this.imagePath,
+    this.qty = 1,
+    this.openCartAfterAdd = true,
+    this.closeCurrentDialog = false,
+  });
+
   @override
   Widget build(BuildContext context) {
-    //final VoidCallback? onPressed = enabled ? () {} : null;
-
     return Center(
       child: FilledButton(
-        onPressed: () {
-          DialogHelper.mostrarAlertaBasica(context);
-        },
-        
-        style: ButtonStyle(
-          padding: WidgetStateProperty.all<EdgeInsetsGeometry>(
-            EdgeInsets.symmetric(horizontal: 80),
-          ),
-          backgroundColor: WidgetStateProperty.all<Color>(
-            const Color.fromARGB(255, 10, 10, 10),
-          ),
-          foregroundColor: WidgetStateProperty.all<Color>(Colors.white),
-        ),
-        child: Text("Agregar al Carrito"),
-      ),
-    );
-  }
-}
-
-
-class DialogHelper {
-  static Future<void> mostrarAlertaBasica(BuildContext context) {
-    return showDialog<String>(
-      barrierDismissible: false,
-      context: context,
-      builder: (BuildContext context) {
-
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          await Future.delayed(const Duration(seconds: 2));
-          
-          if (Navigator.canPop(context)) {
-            Navigator.of(context).pop();
+        onPressed: () async {
+          // 1) Agregar al carrito (Provider)
+          context.read<CartModel>().add(
+            CartItem(
+              productId: productId,
+              name: name,
+              unitPrice: price,
+              qty: qty,
+              modifierIds: modifierIds,
+              modifierLabels: modifierLabels,
+              note: note,
+              imagePath: imagePath,
+            ),
+          );
+        // 2) cierra el diálogo actual (selector) si se pidió
+        if (closeCurrentDialog && Navigator.of(context, rootNavigator: true).canPop()) {
+          Navigator.of(context, rootNavigator: true).pop();
+          // pequeña pausa para evitar usar un context ya desmontado
+          await Future.delayed(const Duration(milliseconds: 50));
+        }
+          // 3) Feedback y/o abrir modal
+          if (openCartAfterAdd && context.mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: true,
+              builder: (_) => const ProductsSelected(), // lee del Provider
+            );
+          } else {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('Producto agregado')));
           }
-        });
-
-        // Future.delayed(const Duration(seconds: 2), () {
-
-        //   if(Navigator.canPop(context)){
-        //     Navigator.of(context).pop();
-        //   }
-        // });
-
-        return AlertDialog(
-          icon: Icon(Icons.check_circle, color: Colors.green, size: 80.0),
-          title: const Text('Pruducto Agregado'),
-          content: SizedBox(
-            width: 350,
-            height: 50,            
-          ),
-          
-        );
-      },
+        },
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 80),
+          backgroundColor: const Color.fromARGB(255, 10, 10, 10),
+          foregroundColor: Colors.white,
+        ),
+        child: const Text('Agregar al carrito'),
+      ),
     );
   }
 }
