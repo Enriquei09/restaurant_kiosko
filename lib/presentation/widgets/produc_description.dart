@@ -128,9 +128,6 @@ class _InfoProductContainerState extends State<InfoProductContainer> {
                 onLabelsChanged: (labels) => setState(()=> _modsLabels = labels),
                 onQtyChanged: (q) => setState(() => qty = q),
                 onNoteChanged: (n) => setState(() => note = n),
-                // si tu ExtraSelector soporta initialQty/initialNote, puedes pasarlos
-                // initialQty: qty,
-                // initialNote: note,
               ),
             ),
           ),
@@ -138,7 +135,6 @@ class _InfoProductContainerState extends State<InfoProductContainer> {
           const Divider(height: 32),
 
           // botón que agrega al carrito con todo lo elegido
-          // OJO: si tu clase se llama LargeButton dentro de larger_button.dart, esto compila bien.
           LargeButton(
             productId: p.id,
             name: p.name,

@@ -4,19 +4,21 @@ import 'package:restaurant_kiosco/models/modifiers.dart';
 
 /// Selector de extras/modificadores para un producto.
 /// - Carga los grupos desde la API: radios y checkboxes.
-/// - Expone callbacks para: IDs seleccionados, labels, cantidad y nota.
+/// - Expone callbacks para: IDs seleccionados, labels, cantidad, nota
+///   y (opcional) total extra de modificadores.
 /// - Muestra controles de Cantidad y Nota al final (siempre, aunque no haya grupos).
 class ExtraSelector extends StatefulWidget {
   const ExtraSelector({
     super.key,
     required this.productId,
-    this.onChanged,         // IDs (modifiers) seleccionados
-    this.onLabelsChanged,   // Nombres/labels seleccionados
-    this.onQtyChanged,      // Cantidad
-    this.onNoteChanged,     // Nota
+    this.onChanged,              // IDs seleccionados
+    this.onLabelsChanged,        // Labels seleccionados
+    this.onQtyChanged,           // Cantidad
+    this.onNoteChanged,          // Nota
+    this.onExtraTotalChanged,    // (opcional) Total $ de modificadores
     this.initialQty = 1,
     this.initialNote,
-     this.initialSelectedIds = const [],
+    this.initialSelectedIds = const [],
   });
 
   /// ID del producto para consultar sus grupos de modificadores
@@ -34,12 +36,17 @@ class ExtraSelector extends StatefulWidget {
   /// Callback: nota (null si vacío)
   final ValueChanged<String?>? onNoteChanged;
 
+  /// (Opcional) Callback con la suma de precios de los modificadores seleccionados
+  final ValueChanged<double>? onExtraTotalChanged;
+
   /// Valor inicial de cantidad
   final int initialQty;
 
   /// Valor inicial de nota
   final String? initialNote;
-  final List<int> initialSelectedIds; 
+
+  /// IDs de modificadores a preseleccionar al cargar
+  final List<int> initialSelectedIds;
 
   @override
   State<ExtraSelector> createState() => _ExtraSelectorState();
@@ -96,11 +103,12 @@ class _ExtraSelectorState extends State<ExtraSelector> {
 
     try {
       final groups = await ApiService.fetchModifierGroups(widget.productId);
+
       // Inicializa estructuras de selección por tipo
       for (int i = 0; i < groups.length; i++) {
         final g = groups[i];
         if (g.selectionType == SelectionType.radio) {
-          _radioSelectedByGroup[i] = null; // o un default si aplica
+          _radioSelectedByGroup[i] = null;
         } else {
           _checkSelectedByGroup[i] = <int>{};
         }
@@ -112,34 +120,10 @@ class _ExtraSelectorState extends State<ExtraSelector> {
       });
 
       // Preseleccionar ids recibidos
-      final init = widget.initialSelectedIds.toSet();
-      for (int i = 0; i < _groups.length; i++) {
-      final g = _groups[i];
-      if (g.selectionType == SelectionType.radio) {
-       int? chosen;
-       for (final m in g.modifiers) {
-      if (init.contains(m.id)) { chosen = m.id; break; }
-          }
-        _radioSelectedByGroup[i] = chosen;
-      } else {
-     final set = <int>{};
-     for (final m in g.modifiers) {
-      if (init.contains(m.id)) set.add(m.id);
-        }
-     _checkSelectedByGroup[i] = set;
-       }
-      }
+      _applyInitialSelectedIds();
 
-// Emitir estado inicial
-_emitSelected();
-widget.onQtyChanged?.call(_qty);
-widget.onNoteChanged?.call(_noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim());
-
-
-      // Notificar estado inicial a quien escucha
-      _emitSelected();
-      widget.onQtyChanged?.call(_qty);
-      widget.onNoteChanged?.call(_normalizedNote());
+      // Notificar estado inicial
+      _notifyAll();
     } catch (e) {
       setState(() {
         _loading = false;
@@ -148,25 +132,46 @@ widget.onNoteChanged?.call(_noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text
     }
   }
 
-  // Junta radios + checks y emite IDs + labels
-  void _emitSelected() {
-    final List<int> selected = [];
+  void _applyInitialSelectedIds() {
+    final init = widget.initialSelectedIds.toSet();
+    if (init.isEmpty) return;
 
+    for (int i = 0; i < _groups.length; i++) {
+      final g = _groups[i];
+      if (g.selectionType == SelectionType.radio) {
+        int? chosen;
+        for (final m in g.modifiers) {
+          if (init.contains(m.id)) {
+            chosen = m.id;
+            break;
+          }
+        }
+        _radioSelectedByGroup[i] = chosen;
+      } else {
+        final set = <int>{};
+        for (final m in g.modifiers) {
+          if (init.contains(m.id)) set.add(m.id);
+        }
+        _checkSelectedByGroup[i] = set;
+      }
+    }
+  }
+
+  // IDs seleccionados (radios + checks)
+  List<int> _selectedIds() {
+    final List<int> selected = [];
     // Radios
     _radioSelectedByGroup.forEach((_, optId) {
       if (optId != null) selected.add(optId);
     });
-
     // Checks
-    _checkSelectedByGroup.forEach((_, set) {
-      selected.addAll(set);
-    });
+    _checkSelectedByGroup.forEach((_, set) => selected.addAll(set));
+    return selected;
+  }
 
-    // Emitir IDs
-    widget.onChanged?.call(selected);
-
-    // Calcular labels a partir de los IDs
-    String? _labelForId(int id) {
+  // Labels seleccionados a partir de IDs
+  List<String> _selectedLabels(List<int> ids) {
+    String? labelFor(int id) {
       for (final g in _groups) {
         for (final m in g.modifiers) {
           if (m.id == id) return m.name;
@@ -174,9 +179,44 @@ widget.onNoteChanged?.call(_noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text
       }
       return null;
     }
+    return ids.map(labelFor).whereType<String>().toList();
+  }
 
-    final labels = selected.map(_labelForId).whereType<String>().toList();
+  // (Opcional) calcula el total extra de los modificadores seleccionados
+  double _calcExtraTotal(List<int> ids) {
+    double total = 0.0;
+
+    // TODO: si tu clase Modifier tiene un campo de precio (por ejemplo `price` o `priceDelta`),
+    // descomenta alguna de las líneas dentro del loop y ajusta el nombre del campo:
+    for (final g in _groups) {
+      for (final m in g.modifiers) {
+        if (ids.contains(m.id)) {
+          // total += m.price;       // <- si tu modelo expone `price`
+          // total += m.priceDelta;  // <- o si expone `priceDelta`
+          // De lo contrario, deja en 0.0 y maneja el cálculo fuera.
+        }
+      }
+    }
+
+    return total;
+  }
+
+  void _notifyAll() {
+    final ids = _selectedIds();
+    final labels = _selectedLabels(ids);
+    widget.onChanged?.call(ids);
     widget.onLabelsChanged?.call(labels);
+    widget.onQtyChanged?.call(_qty);
+    widget.onNoteChanged?.call(_normalizedNote());
+    widget.onExtraTotalChanged?.call(_calcExtraTotal(ids));
+  }
+
+  void _notifySelectionOnly() {
+    final ids = _selectedIds();
+    final labels = _selectedLabels(ids);
+    widget.onChanged?.call(ids);
+    widget.onLabelsChanged?.call(labels);
+    widget.onExtraTotalChanged?.call(_calcExtraTotal(ids));
   }
 
   String? _normalizedNote() {
@@ -244,7 +284,7 @@ widget.onNoteChanged?.call(_noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text
                   activeColor: Colors.redAccent,
                   onChanged: (v) => setState(() {
                     _radioSelectedByGroup[gi] = v;
-                    _emitSelected();
+                    _notifySelectionOnly();
                   }),
                 );
               })
@@ -264,7 +304,7 @@ widget.onNoteChanged?.call(_noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text
                     } else {
                       set.remove(m.id);
                     }
-                    _emitSelected();
+                    _notifySelectionOnly();
                   }),
                 );
               }),

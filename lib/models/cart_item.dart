@@ -1,6 +1,7 @@
 class CartItem {
   final int productId;
   final String name;
+  final String? description;
   final double unitPrice;
   final int qty;
   final List<int> modifierIds; // extras seleccionados
@@ -12,6 +13,7 @@ class CartItem {
     required this.productId,
     required this.name,
     required this.unitPrice,
+    this.description,
     this.qty = 1,
     this.modifierIds = const [],
     this.note,
@@ -22,6 +24,7 @@ class CartItem {
   CartItem copyWith({int? qty}) => CartItem(
     productId: productId,
     name: name,
+    description: description,
     unitPrice: unitPrice,
     qty: qty ?? this.qty,
     modifierIds: modifierIds,
@@ -36,6 +39,7 @@ class CartItem {
   Map<String, dynamic> toJson() => {
     'product_id': productId,
     'name': name,
+    'description':description,
     'unit_price': unitPrice,
     'qty': qty,
     'modifiers': modifierIds,
@@ -47,6 +51,7 @@ class CartItem {
   factory CartItem.fromJson(Map<String, dynamic> m) => CartItem(
     productId: m['product_id'],
     name: m['name'],
+     description: m['description'], 
     unitPrice: (m['unit_price'] as num).toDouble(),
     qty: m['qty'],
     modifierIds: List<int>.from(m['modifiers'] ?? []),
