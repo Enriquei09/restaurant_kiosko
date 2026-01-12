@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
+import 'package:restaurant_kiosco/providers/cart_model.dart';
+import 'package:restaurant_kiosco/providers/tip_model.dart';
+
 
 class PaymentMethodCard extends StatelessWidget {
   const PaymentMethodCard({super.key});
@@ -66,28 +69,75 @@ class PaymentMethodCard extends StatelessWidget {
           height: 44,
           child: ElevatedButton(
             onPressed: () {
-              final selected = context.read<PaymentModel>().method;
+              final payment = context.read<PaymentModel>();
+              final cart = context.read<CartModel>();
+              final tip = context.read<TipModel>();
 
-              // Por ahora solo mostramos qué se eligió (debug/validación)
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    selected == PaymentMethod.cash
-                        ? 'Pago seleccionado: Efectivo'
-                        : 'Pago seleccionado: Tarjeta',
+              if (cart.items.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Tu carrito está vacío')),
+                );
+                return;
+              }
+
+              final subtotal = cart.items.fold<double>(0.0, (sum, it) => sum + (it.unitPrice * it.qty));
+              final tipAmount = subtotal * tip.tipRate;
+              final taxAmount = subtotal * cart.taxRate;
+              final total = subtotal + tipAmount + taxAmount;
+
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Pago generado'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        payment.method == PaymentMethod.cash
+                            ? 'Método: Efectivo'
+                            : 'Método: Tarjeta',
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Subtotal: \$${subtotal.toStringAsFixed(2)}'),
+                      Text('Propina: \$${tipAmount.toStringAsFixed(2)}'),
+                      Text('IVA: \$${taxAmount.toStringAsFixed(2)}'),
+                      const Divider(height: 18),
+                      Text(
+                        'Total: \$${total.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
                   ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancelar'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+
+                        // Aquí después conectamos: imprimir ticket / guardar orden / limpiar carrito
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Pago confirmado ✅')),
+                        );
+                      },
+                      child: const Text('Confirmar'),
+                    ),
+                  ],
                 ),
               );
-
-              // Aquí después conectamos "hacer pedido"
             },
+
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1B0D3A),
+              backgroundColor: const Color.fromARGB(255, 15, 95, 15),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text('Hacer pedido'),
+            child: const Text('Generar pago', style: TextStyle(color: Colors.white)),
+            
           ),
         ),
       ],
