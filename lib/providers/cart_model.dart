@@ -9,6 +9,9 @@ class CartModel extends ChangeNotifier {
 
   List<CartItem> get items => List.unmodifiable(_items);
 
+  int get totalItems => _items.fold(0, (sum, it) => sum + it.qty);
+
+
   void add(CartItem item) {
     final i = _items.indexWhere((e) =>
       e.productId == item.productId &&

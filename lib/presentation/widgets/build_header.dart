@@ -35,6 +35,8 @@ class BuildHeader extends StatelessWidget {
             //   ),
             //   child: const Text('Orden'),
             // ),
+
+            //ButtonIcon() es el boton de carrito de compra
             ButtonIcon(),
             const SizedBox(width: 12),
             const Icon(Icons.person_3_outlined),
