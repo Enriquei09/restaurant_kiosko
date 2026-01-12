@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 
 import 'package:restaurant_kiosco/presentation/screens/menu/menu_screen.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart'; // <-- asegúrate de tener este archivo
+import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.dart';
+import 'package:restaurant_kiosco/providers/payment_model.dart';
+
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,6 +15,7 @@ void main() {
       providers: [
         // Restaura el carrito guardado al iniciar
         ChangeNotifierProvider(create: (_) => CartModel()..restore()),
+        ChangeNotifierProvider(create: (_) => PaymentModel()),
       ],
       child: const MyApp(),
     ),
@@ -26,7 +30,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Kiosko',
-      home: const MenuScreen(),
+      home: 
+        const CheckoutScreen(),
+        //const MenuScreen(),
     );
   }
 }
