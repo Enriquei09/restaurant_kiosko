@@ -49,7 +49,7 @@ class CartModel extends ChangeNotifier {
   }
 
   void removeAt(int index) { _items.removeAt(index); notifyListeners(); save(); }
-  void clear() { _items.clear(); notifyListeners(); save(); }
+  void clear() { _items.clear(); ;notifyListeners(); save(); }
 
   double get subtotal => _items.fold(0, (s, it) => s + it.line);
   double get tax => double.parse((subtotal * taxRate).toStringAsFixed(2));
@@ -79,10 +79,12 @@ class CartModel extends ChangeNotifier {
     return true;
   }
   void replaceAt(int index, CartItem updated) {
-  if (index < 0 || index >= _items.length) return;
-  _items[index] = updated;
-  notifyListeners();
-  save();
-}
+    if (index < 0 || index >= _items.length) return;
+    _items[index] = updated;
+    notifyListeners();
+    save();
+  }
+
+  
 
 }

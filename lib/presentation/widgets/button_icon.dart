@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/presentation/widgets/products_selected.dart';
+import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.dart';
+
 
 
 class ButtonIcon extends StatelessWidget {
@@ -20,9 +22,19 @@ class ButtonIcon extends StatelessWidget {
             Icons.shopping_cart_outlined,
             color: Color.fromARGB(255, 247, 246, 246),
           ),
-          onPressed: () {
-            // Usa tu helper (barrierDismissible true)
-            ProductsSelected.show(context);
+          onPressed: () async {
+            final goCheckout = await showDialog<bool>(
+              context: context,
+              barrierDismissible: true,
+              builder: (_) => ProductsSelected(),
+            );
+
+            if (goCheckout == true) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CheckoutScreen()),
+              );
+            }
           },
         ),
 

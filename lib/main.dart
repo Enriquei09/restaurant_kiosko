@@ -34,8 +34,8 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Kiosko',
       home: 
-        const CheckoutScreen(),
-        //const MenuScreen(),
+        //const CheckoutScreen(),
+        const MenuScreen(),
     );
   }
 }

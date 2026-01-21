@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/presentation/widgets/edit_cart_item_dialog.dart';
+import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.dart';
 
 class ProductsSelected extends StatelessWidget {
   const ProductsSelected({super.key});
@@ -74,15 +75,14 @@ class ProductsSelected extends StatelessWidget {
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: cart.items.isEmpty
-                              ? null
-                              : () {
-                                  Navigator.of(context).pop();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Listo para pagar')),
-                                  );
-                                  // TODO: integra checkout a Laravel
-                                },
+                           onPressed: () {
+                            Navigator.pop(context); // cierra el diálogo
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CheckoutScreen()),
+                            );
+                          },                          
+                          
                           child: const Text('Confirmar'),
                         ),
                       ),
