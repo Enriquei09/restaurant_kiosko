@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
-import 'package:restaurant_kiosco/providers/tip_model.dart';
-
+import 'package:restaurant_kiosco/presentation/pages/payment/payment_screen.dart';
 
 class PaymentMethodCard extends StatelessWidget {
   const PaymentMethodCard({super.key});
@@ -69,9 +68,7 @@ class PaymentMethodCard extends StatelessWidget {
           height: 44,
           child: ElevatedButton(
             onPressed: () {
-              final payment = context.read<PaymentModel>();
               final cart = context.read<CartModel>();
-              final tip = context.read<TipModel>();
 
               if (cart.items.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -80,64 +77,21 @@ class PaymentMethodCard extends StatelessWidget {
                 return;
               }
 
-              final subtotal = cart.items.fold<double>(0.0, (sum, it) => sum + (it.unitPrice * it.qty));
-              final tipAmount = subtotal * tip.tipRate;
-              final taxAmount = subtotal * cart.taxRate;
-              final total = subtotal + tipAmount + taxAmount;
-
-              showDialog(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: const Text('Pago generado'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        payment.method == PaymentMethod.cash
-                            ? 'Método: Efectivo'
-                            : 'Método: Tarjeta',
-                      ),
-                      const SizedBox(height: 12),
-                      Text('Subtotal: \$${subtotal.toStringAsFixed(2)}'),
-                      Text('Propina: \$${tipAmount.toStringAsFixed(2)}'),
-                      Text('IVA: \$${taxAmount.toStringAsFixed(2)}'),
-                      const Divider(height: 18),
-                      Text(
-                        'Total: \$${total.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancelar'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-
-                        // Aquí después conectamos: imprimir ticket / guardar orden / limpiar carrito
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Pago confirmado ✅')),
-                        );
-                      },
-                      child: const Text('Confirmar'),
-                    ),
-                  ],
-                ),
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PaymentScreen()),
               );
             },
-
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color.fromARGB(255, 15, 95, 15),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text('Generar pago', style: TextStyle(color: Colors.white)),
-            
+            child: const Text(
+              'Generar pago',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ),
       ],
