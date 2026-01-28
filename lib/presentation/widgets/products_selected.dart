@@ -156,20 +156,12 @@ class _CartRowState extends State<_CartRow> {
     super.dispose();
   }
 
-  void _saveQty() {
-    final cart = context.read<CartModel>();
-    final n = int.tryParse(_controller.text);
-    if (n == null || n < 0 || n > 100) return;
-    cart.setQty(widget.index, n);
-    setState(() => isEditingQty = false);
-  }
-
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartModel>();
     final it = cart.items[widget.index];
 
-    Widget _image() {
+    Widget image() {
       final path = it.imagePath;
       if (path == null || path.isEmpty) {
         return Container(
@@ -201,7 +193,7 @@ class _CartRowState extends State<_CartRow> {
             children: [
               Row(
                 children: [
-                  _image(),
+                  image(),
                   const SizedBox(width: 10),
 
                   // Nombre + precio

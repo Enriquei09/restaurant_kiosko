@@ -43,7 +43,6 @@ class _ProductMiniCard extends StatelessWidget {
   final double price;
 
   const _ProductMiniCard({
-    super.key,
     required this.imagePath,
     required this.title,
     required this.price,

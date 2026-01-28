@@ -184,21 +184,9 @@ class _ExtraSelectorState extends State<ExtraSelector> {
 
   // (Opcional) calcula el total extra de los modificadores seleccionados
   double _calcExtraTotal(List<int> ids) {
-    double total = 0.0;
-
-    // TODO: si tu clase Modifier tiene un campo de precio (por ejemplo `price` o `priceDelta`),
-    // descomenta alguna de las líneas dentro del loop y ajusta el nombre del campo:
-    for (final g in _groups) {
-      for (final m in g.modifiers) {
-        if (ids.contains(m.id)) {
-          // total += m.price;       // <- si tu modelo expone `price`
-          // total += m.priceDelta;  // <- o si expone `priceDelta`
-          // De lo contrario, deja en 0.0 y maneja el cálculo fuera.
-        }
-      }
-    }
-
-    return total;
+    // El modelo actual de ModifierOption no incluye precios
+    // Si en el futuro se agrega un campo de precio, implementar aquí el cálculo
+    return 0.0;
   }
 
   void _notifyAll() {

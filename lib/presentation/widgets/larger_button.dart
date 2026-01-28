@@ -62,7 +62,7 @@ class LargeButton extends StatelessWidget {
               barrierDismissible: true,
               builder: (_) => const ProductsSelected(), // lee del Provider
             );
-          } else {
+          } else if (context.mounted) {
             ScaffoldMessenger.of(context)
                 .showSnackBar(const SnackBar(content: Text('Producto agregado')));
           }

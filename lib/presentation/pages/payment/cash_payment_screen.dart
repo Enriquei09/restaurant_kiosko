@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart';
+import 'package:restaurant_kiosco/providers/payment_model.dart';
+import 'package:restaurant_kiosco/service/api_service.dart';
+import 'package:restaurant_kiosco/service/configuration_service.dart';
 
 import 'payment_success_screen.dart';
 
@@ -106,16 +109,82 @@ class _CashPaymentScreenState extends State<CashPaymentScreen> {
                     height: 46,
                     child: ElevatedButton(
                       onPressed: canConfirm
-                          ? () {
-                              // ✅ Confirmar pago: limpiar carrito y pasar a éxito
-                              context.read<CartModel>().clear();
-
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const PaymentSuccessScreen(),
+                          ? () async {
+                              // Mostrar loading
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (ctx) => const Center(
+                                  child: CircularProgressIndicator(),
                                 ),
                               );
+
+                              try {
+                                final payment = context.read<PaymentModel>();
+                                
+                                // Preparar items para el backend
+                                final orderItems = items.map((item) {
+                                  return {
+                                    'product_id': item.productId,
+                                    'quantity': item.qty,
+                                    'unit_price': item.unitPrice,
+                                    'subtotal': item.unitPrice * item.qty,
+                                    'notes': item.note,
+                                    'modifiers': item.modifierIds,
+                                  };
+                                }).toList();
+
+                                // Obtener configuración del restaurante
+                                final restaurantId = await ConfigurationService.getRestaurantId();
+
+                                // Enviar orden al backend
+                                await ApiService.createOrder(
+                                  restaurantId: restaurantId,
+                                  clientName: payment.clientName,
+                                  clientPhone: payment.clientPhone,
+                                  items: orderItems,
+                                  total: total,
+                                  tip: tipAmount,
+                                );
+
+                                // Limpiar carrito y datos
+                                if (mounted) {
+                                  context.read<CartModel>().clear();
+                                }
+                                if (mounted) {
+                                  context.read<PaymentModel>().clear();
+                                }
+                                
+                                // Cerrar loading
+                                if (mounted) {
+                                  Navigator.pop(context);
+                                }
+
+                                // Ir a pantalla de éxito
+                                if (mounted) {
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const PaymentSuccessScreen(),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                // Cerrar loading
+                                if (mounted) {
+                                  Navigator.pop(context);
+                                }
+                                
+                                // Mostrar error
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error al crear orden: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
                             }
                           : null,
                       style: ElevatedButton.styleFrom(
