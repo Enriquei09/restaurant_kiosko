@@ -16,113 +16,62 @@ class CashPaymentScreen extends StatefulWidget {
 }
 
 class _CashPaymentScreenState extends State<CashPaymentScreen> {
-  final TextEditingController _receivedCtrl = TextEditingController();
-
-  double _parseMoney(String v) {
-    final cleaned = v.replaceAll(',', '').trim();
-    return double.tryParse(cleaned) ?? 0.0;
-  }
-
-  @override
-  void dispose() {
-    _receivedCtrl.dispose();
-    super.dispose();
-  }
+  bool _isLoading = false;
 
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartModel>();
     final tip = context.watch<TipModel>();
-
     final items = cart.items;
 
     final subtotal = items.fold<double>(0.0, (sum, it) => sum + (it.unitPrice * it.qty));
     final tipAmount = subtotal * tip.tipRate;
-    final taxAmount = subtotal * cart.taxRate; // por ahora lo dejamos
+    final taxAmount = subtotal * cart.taxRate;
     final total = subtotal + tipAmount + taxAmount;
-
-    final received = _parseMoney(_receivedCtrl.text);
-    final change = received - total;
-
-    final canConfirm = items.isNotEmpty && change >= 0;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pago en efectivo'),
+        title: const Text('Pagar en Caja'),
       ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 700),
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(32),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  Icon(Icons.storefront, size: 100, color: Colors.blue.shade800),
+                  const SizedBox(height: 32),
                   const Text(
-                    'Total a pagar',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    'Pagar en Mostrador',
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   Text(
-                    '\$${total.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900),
+                    'Total a pagar: \$${total.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.green),
                   ),
-                  const SizedBox(height: 18),
-
-                  TextField(
-                    controller: _receivedCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Monto recibido',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setState(() {}),
+                  const SizedBox(height: 32),
+                  const Text(
+                    'Al confirmar, se generará tu orden. Deberás pasar a la caja para realizar el pago y que tu comida empiece a prepararse.',
+                    style: TextStyle(fontSize: 18),
+                    textAlign: TextAlign.center,
                   ),
-
-                  const SizedBox(height: 14),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Cambio',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        canConfirm
-                            ? '\$${change.toStringAsFixed(2)}'
-                            : 'Falta \$${(-change).toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: canConfirm ? Colors.green : Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-
                   const Spacer(),
-
                   SizedBox(
                     width: double.infinity,
-                    height: 46,
+                    height: 56,
                     child: ElevatedButton(
-                      onPressed: canConfirm
-                          ? () async {
-                              // Mostrar loading
-                              showDialog(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (ctx) => const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              );
-
+                      onPressed: _isLoading
+                          ? null
+                          : () async {
+                              setState(() => _isLoading = true);
                               try {
                                 final payment = context.read<PaymentModel>();
                                 
-                                // Preparar items para el backend
                                 final orderItems = items.map((item) {
                                   return {
                                     'product_id': item.productId,
@@ -134,69 +83,54 @@ class _CashPaymentScreenState extends State<CashPaymentScreen> {
                                   };
                                 }).toList();
 
-                                // Obtener configuración del restaurante
                                 final restaurantId = await ConfigurationService.getRestaurantId();
 
-                                // Enviar orden al backend
-                                await ApiService.createOrder(
+                                final response = await ApiService.createOrder(
                                   restaurantId: restaurantId,
                                   clientName: payment.clientName,
                                   clientPhone: payment.clientPhone,
+                                  paymentMethod: 'cash',
                                   items: orderItems,
                                   total: total,
                                   tip: tipAmount,
                                 );
 
-                                // Limpiar carrito y datos
                                 if (mounted) {
                                   context.read<CartModel>().clear();
-                                }
-                                if (mounted) {
                                   context.read<PaymentModel>().clear();
-                                }
-                                
-                                // Cerrar loading
-                                if (mounted) {
-                                  Navigator.pop(context);
-                                }
+                                  
+                                  // Obtener ID de orden para mostrarlo (si la API lo devuelve en response['id'])
+                                  // La respuesta de createOrder devuelve data['data'] que es el objeto Order
+                                  final orderId = response['id'];
+                                  final orderNumber = orderId != null ? '#$orderId' : '';
 
-                                // Ir a pantalla de éxito
-                                if (mounted) {
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => const PaymentSuccessScreen(),
+                                      builder: (_) => PaymentSuccessScreen(
+                                        title: '¡Orden Creada!',
+                                        message: 'Tu número de orden es $orderNumber.\nPor favor pasa a caja para pagar.',
+                                      ),
                                     ),
                                   );
                                 }
                               } catch (e) {
-                                // Cerrar loading
-                                if (mounted) {
-                                  Navigator.pop(context);
-                                }
-                                
-                                // Mostrar error
+                                setState(() => _isLoading = false);
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Error al crear orden: $e'),
-                                      backgroundColor: Colors.red,
-                                    ),
+                                    SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
                                   );
                                 }
                               }
-                            }
-                          : null,
+                            },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color.fromARGB(255, 15, 95, 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                        backgroundColor: Colors.blue.shade800,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
-                      child: const Text(
-                        'Confirmar pago',
-                        style: TextStyle(color: Colors.white),
-                      ),
+                      child: _isLoading 
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('Generar Ticket de Pago', style: TextStyle(fontSize: 18)),
                     ),
                   ),
                 ],

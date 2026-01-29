@@ -38,7 +38,9 @@ class KitchenOrder {
   String get statusLabel {
     switch (status) {
       case 'pending':
-        return 'Pendiente';
+        return 'Pendiente Pago';
+      case 'confirmed':
+        return 'Por Preparar';
       case 'preparing':
         return 'En Preparación';
       case 'ready':

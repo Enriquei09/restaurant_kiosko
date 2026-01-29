@@ -3,7 +3,14 @@ import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 
 class PaymentSuccessScreen extends StatelessWidget {
-  const PaymentSuccessScreen({super.key});
+  final String title;
+  final String message;
+
+  const PaymentSuccessScreen({
+    super.key,
+    this.title = 'Pago realizado con éxito',
+    this.message = 'Gracias. Puedes iniciar una nueva orden.',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -19,14 +26,15 @@ class PaymentSuccessScreen extends StatelessWidget {
                 children: [
                   const Icon(Icons.check_circle, size: 90, color: Colors.green),
                   const SizedBox(height: 14),
-                  const Text(
-                    'Pago realizado con éxito',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                  Text(
+                    title,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Gracias. Puedes iniciar una nueva orden.',
-                    style: TextStyle(fontSize: 14),
+                  Text(
+                    message,
+                    style: const TextStyle(fontSize: 16),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),

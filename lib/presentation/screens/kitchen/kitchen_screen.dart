@@ -37,10 +37,10 @@ class _KitchenScreenState extends State<KitchenScreen> {
   Future<void> _loadOrders() async {
     try {
       // Filtrar según tab seleccionado
-      String statusFilter = 'pending,preparing,ready'; // Por defecto, solo activas
+      String statusFilter = 'confirmed,preparing,ready'; // Por defecto, solo activas
       
-      if (selectedTab == 'pending') {
-        statusFilter = 'pending';
+      if (selectedTab == 'confirmed') {
+        statusFilter = 'confirmed';
       } else if (selectedTab == 'preparing') {
         statusFilter = 'preparing';
       } else if (selectedTab == 'ready') {
@@ -109,8 +109,8 @@ class _KitchenScreenState extends State<KitchenScreen> {
             color: Colors.grey.shade200,
             child: Row(
               children: [
-                _buildTabButton('Todos', 'all', (counts['pending'] ?? 0) + (counts['preparing'] ?? 0) + (counts['ready'] ?? 0)),
-                _buildTabButton('Pendientes', 'pending', counts['pending'] ?? 0),
+                _buildTabButton('Todos', 'all', (counts['confirmed'] ?? 0) + (counts['preparing'] ?? 0) + (counts['ready'] ?? 0)),
+                _buildTabButton('Por Preparar', 'confirmed', counts['confirmed'] ?? 0),
                 _buildTabButton('Preparando', 'preparing', counts['preparing'] ?? 0),
                 _buildTabButton('Listos', 'ready', counts['ready'] ?? 0),
               ],
@@ -209,7 +209,7 @@ class _OrderCard extends StatelessWidget {
 
   Color _getStatusColor() {
     switch (order.status) {
-      case 'pending':
+      case 'confirmed':
         return Colors.red.shade100;
       case 'preparing':
         return Colors.blue.shade100;
@@ -376,7 +376,7 @@ class _OrderCard extends StatelessWidget {
 
   Color _getStatusBadgeColor() {
     switch (order.status) {
-      case 'pending':
+      case 'confirmed':
         return Colors.red;
       case 'preparing':
         return Colors.blue;
@@ -389,7 +389,7 @@ class _OrderCard extends StatelessWidget {
 
   Widget _buildActionButtons(BuildContext context) {
     switch (order.status) {
-      case 'pending':
+      case 'confirmed':
         return ElevatedButton.icon(
           onPressed: () => onStatusChange(order.id, 'preparing'),
           icon: const Icon(Icons.restaurant),

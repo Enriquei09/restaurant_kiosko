@@ -3,12 +3,13 @@ import 'package:provider/provider.dart';
 
 import 'package:restaurant_kiosco/presentation/screens/menu/menu_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/kitchen/kitchen_screen.dart';
-import 'package:restaurant_kiosco/providers/cart_model.dart'; // <-- asegúrate de tener este archivo
-//import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/cashier/cashier_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/splash_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/restaurant_selection_screen.dart';
+import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart';
-
-
+import 'package:restaurant_kiosco/providers/restaurant_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,10 +17,10 @@ void main() {
   runApp(
     MultiProvider(
       providers: [
-        // Restaura el carrito guardado al iniciar
         ChangeNotifierProvider(create: (_) => CartModel()..restore()),
         ChangeNotifierProvider(create: (_) => PaymentModel()),
         ChangeNotifierProvider(create: (_) => TipModel()),
+        ChangeNotifierProvider(create: (_) => RestaurantProvider()),
       ],
       child: const MyApp(),
     ),
@@ -33,12 +34,20 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Kiosko',
-      initialRoute: '/',
+      title: 'THALO Kiosk',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF3d5a80),
+        ),
+        useMaterial3: true,
+      ),
+      home: const SplashScreen(),
       routes: {
-        '/': (context) => const HomeScreen(),
+        '/home': (context) => const HomeScreen(),
         '/menu': (context) => const MenuScreen(),
         '/kitchen': (context) => const KitchenScreen(),
+        '/cashier': (context) => const CashierScreen(),
+        '/restaurant-selection': (context) => const RestaurantSelectionScreen(),
       },
     );
   }
@@ -52,7 +61,8 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sistema POS - Restaurante'),
-        backgroundColor: Colors.orange.shade700,
+        backgroundColor: const Color(0xFF3d5a80),
+        foregroundColor: Colors.white,
       ),
       body: Center(
         child: Padding(
@@ -61,7 +71,7 @@ class HomeScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Text(
-                '¿Qué deseas hacer?',
+                'Selecciona tu Rol',
                 style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 48),
@@ -70,15 +80,23 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   _buildOptionCard(
                     context,
-                    title: 'Kiosko\nCliente',
-                    icon: Icons.restaurant_menu,
+                    title: 'KIOSKO\nCliente',
+                    icon: Icons.touch_app,
                     color: Colors.blue,
                     onTap: () => Navigator.pushNamed(context, '/menu'),
                   ),
                   const SizedBox(width: 32),
                   _buildOptionCard(
                     context,
-                    title: 'Pantalla\nCocina',
+                    title: 'CAJA\nCobro',
+                    icon: Icons.point_of_sale,
+                    color: Colors.green,
+                    onTap: () => Navigator.pushNamed(context, '/cashier'),
+                  ),
+                  const SizedBox(width: 32),
+                  _buildOptionCard(
+                    context,
+                    title: 'COCINA\nPedidos',
                     icon: Icons.kitchen,
                     color: Colors.orange,
                     onTap: () => Navigator.pushNamed(context, '/kitchen'),
@@ -113,7 +131,7 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 100, color: color),
+            Icon(icon, size: 80, color: color),
             const SizedBox(height: 24),
             Text(
               title,
@@ -130,4 +148,3 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-

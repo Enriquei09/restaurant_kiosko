@@ -116,6 +116,7 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
                                   restaurantId: restaurantId,
                                   clientName: payment.clientName,
                                   clientPhone: payment.clientPhone,
+                                  paymentMethod: 'card_kiosk',
                                   items: orderItems,
                                   total: total,
                                   tip: tipAmount,
