@@ -95,7 +95,8 @@ class ApiService {
     required int restaurantId,
     String? clientName,
     String? clientPhone,
-    required String paymentMethod,
+    String? paymentMethod, // Optional for Open Tabs
+    int? tableId,
     required List<Map<String, dynamic>> items,
     required double total,
     double tip = 0.0,
@@ -111,7 +112,8 @@ class ApiService {
         'restaurant_id': restaurantId,
         'client_name': clientName,
         'client_phone': clientPhone,
-        'payment_method': paymentMethod,
+        'payment_method': paymentMethod, // Can be null
+        'table_id': tableId,
         'items': items,
         'total': total,
         'tip': tip,
@@ -169,5 +171,29 @@ class ApiService {
 
     final List restaurantsData = data['data'];
     return restaurantsData.map((json) => Restaurant.fromJson(json)).toList();
+  }
+
+  // Método para pagar una orden existente
+  static Future<void> payOrder({
+    required int orderId,
+    required String paymentMethod,
+    double? tip,
+  }) async {
+    final url = Uri.parse('$baseUrl/orders/$orderId/pay');
+    final res = await http.patch(
+      url,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'payment_method': paymentMethod,
+        'tip': tip,
+      }),
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception('Error al pagar orden: ${res.body}');
+    }
   }
 }

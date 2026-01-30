@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:restaurant_kiosco/models/kitchen_order.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
+import 'package:restaurant_kiosco/presentation/screens/cashier/tables_screen.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
 
 class CashierScreen extends StatefulWidget {
@@ -61,12 +62,13 @@ class _CashierScreenState extends State<CashierScreen> {
 
   Future<void> _confirmPayment(int orderId) async {
     try {
-      await ApiService.updateOrderStatus(orderId: orderId, status: 'confirmed');
+      // Usamos el nuevo endpoint de pago
+      await ApiService.payOrder(orderId: orderId, paymentMethod: 'cash'); // Defaulting to cash for button click
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('¡Pago confirmado! Orden enviada a cocina.'),
+            content: Text('¡Pago registrado! Mesa liberada.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -185,6 +187,22 @@ class _CashierOrderCard extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    if (order.tableName != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Mesa: ${order.tableName}',
+                          style: TextStyle(
+                            fontSize: 16, 
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade800
+                          ),
+                        ),
+                      ),
                     if (order.clientName != null)
                       Text(
                         order.clientName!,

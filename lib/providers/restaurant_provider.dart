@@ -38,15 +38,20 @@ class RestaurantProvider extends ChangeNotifier {
 
   /// Seleccionar restaurante
   Future<void> selectRestaurant(int restaurantId, int tenantId) async {
+    debugPrint('selectRestaurant called with $restaurantId, $tenantId');
     try {
       _currentRestaurantId = restaurantId;
       _currentTenantId = tenantId;
 
+      debugPrint('Getting SharedPreferences...');
       final prefs = await SharedPreferences.getInstance();
+      debugPrint('Saving to SharedPreferences...');
       await prefs.setInt('selected_restaurant_id', restaurantId);
       await prefs.setInt('selected_tenant_id', tenantId);
 
+      debugPrint('Loading restaurant data...');
       await loadRestaurantData();
+      debugPrint('Restaurant data loaded. Notifying listeners...');
       notifyListeners();
     } catch (e) {
       _error = 'Error al seleccionar restaurante: $e';
@@ -57,6 +62,7 @@ class RestaurantProvider extends ChangeNotifier {
 
   /// Cargar datos del restaurante actual
   Future<void> loadRestaurantData() async {
+    debugPrint('loadRestaurantData called for $_currentRestaurantId');
     if (_currentRestaurantId == null) return;
 
     _isLoading = true;
@@ -64,7 +70,9 @@ class RestaurantProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('Fetching restaurant from API...');
       _currentRestaurant = await ApiService.fetchRestaurant(_currentRestaurantId!);
+      debugPrint('Restaurant fetched: ${_currentRestaurant?.name}');
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -120,5 +128,10 @@ class RestaurantProvider extends ChangeNotifier {
     if (_currentRestaurantId != null) {
       await loadRestaurantData();
     }
+  }
+
+  Future<int> getRestaurantId() async {
+      await initialize();
+      return _currentRestaurantId ?? 1; // Default to 1 if null, or handle error
   }
 }

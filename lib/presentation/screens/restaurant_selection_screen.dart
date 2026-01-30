@@ -88,7 +88,7 @@ class _RestaurantSelectionScreenState
                   ),
                 ),
                 child: Consumer<RestaurantProvider>(
-                  builder: (context, provider, child) {
+                  builder: (ctx, provider, child) {
                     if (provider.isLoading) {
                       return const Center(
                         child: CircularProgressIndicator(
@@ -169,7 +169,7 @@ class _RestaurantSelectionScreenState
                     return ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: provider.availableRestaurants.length,
-                      itemBuilder: (context, index) {
+                      itemBuilder: (ctx, index) {
                         final restaurant = provider.availableRestaurants[index];
 
                         return Card(
@@ -181,13 +181,28 @@ class _RestaurantSelectionScreenState
                           child: InkWell(
                             borderRadius: BorderRadius.circular(16),
                             onTap: () async {
+                              debugPrint('Tapped restaurant ${restaurant.id}');
+                              
+                              // Use 'context' (parent), NOT 'ctx' (inner, which might unmount)
+                              final navigator = Navigator.of(context); 
+                              final messenger = ScaffoldMessenger.of(context);
+
                               await provider.selectRestaurant(
                                 restaurant.id,
                                 widget.tenantId,
                               );
 
-                              if (context.mounted) {
-                                Navigator.pushReplacementNamed(context, '/home');
+                              // Check provider error directly or just proceed if no throw
+                              if (provider.error != null) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error: ${provider.error}'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              } else {
+                                debugPrint('Navigating to home...');
+                                navigator.pushReplacementNamed('/home');
                               }
                             },
                             child: Padding(

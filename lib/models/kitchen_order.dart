@@ -7,6 +7,7 @@ class KitchenOrder {
   final double tip;
   final String createdAt;
   final List<KitchenOrderItem> items;
+  final String? tableName;
 
   KitchenOrder({
     required this.id,
@@ -17,6 +18,7 @@ class KitchenOrder {
     required this.tip,
     required this.createdAt,
     required this.items,
+    this.tableName,
   });
 
   factory KitchenOrder.fromJson(Map<String, dynamic> json) {
@@ -25,6 +27,7 @@ class KitchenOrder {
       status: json['status'],
       clientName: json['client']?['name'],
       clientPhone: json['client']?['phone'],
+      tableName: json['table']?['name'],
       total: double.parse(json['total'].toString()),
       tip: double.parse(json['tip'].toString()),
       createdAt: json['created_at'],
@@ -34,25 +37,47 @@ class KitchenOrder {
     );
   }
 
-  // Helper para obtener color según status
+  // Helper para obtener color según status (Legacy)
   String get statusLabel {
     switch (status) {
-      case 'pending':
-        return 'Pendiente Pago';
-      case 'confirmed':
-        return 'Por Preparar';
-      case 'preparing':
-        return 'En Preparación';
-      case 'ready':
-        return 'Listo';
-      case 'delivered':
-        return 'Entregado';
-      case 'cancelled':
-        return 'Cancelado';
-      default:
-        return status;
+      case 'pending': return 'Pendiente Pago';
+      case 'confirmed': return 'Por Preparar';
+      case 'preparing': return 'En Preparación';
+      case 'ready': return 'Listo';
+      case 'delivered': return 'Entregado';
+      case 'cancelled': return 'Cancelado';
+      default: return status;
     }
   }
+
+  // Helper para DateTime
+  DateTime get createdDateTime {
+    return DateTime.parse(createdAt); // Assuming ISO or parseable format from Laravel
+  }
+
+  int get elapsedMinutes {
+    return DateTime.now().difference(createdDateTime).inMinutes;
+  }
+
+  // Helper para determinar "Comer Aquí" vs "Para Llevar"
+  String get orderTypeLabel {
+    // 1. Priority: Assigned Table (Waiter / Dine In with Number)
+    if (tableName != null) {
+      if (clientName != null) return 'Mesa $tableName ($clientName)';
+      return 'Mesa $tableName';
+    }
+
+    // 2. Kiosk Tags
+    if (items.isNotEmpty && items[0].notes != null) {
+      if (items[0].notes!.contains('PARA COMER AQUÍ')) return 'Comer Aquí';
+      if (items[0].notes!.contains('PARA LLEVAR')) return 'Llevar';
+    }
+    
+    // 3. Fallback
+    return 'Llevar'; // Default to Take Away
+  }
+
+  bool get isTakeAway => orderTypeLabel == 'Llevar';
 }
 
 class KitchenOrderItem {

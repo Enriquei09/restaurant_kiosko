@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cart_item.dart';
 
+enum OrderType { dineIn, takeAway }
+
 class CartModel extends ChangeNotifier {
   final List<CartItem> _items = [];
   double taxRate = 0.16;
@@ -10,6 +12,23 @@ class CartModel extends ChangeNotifier {
   List<CartItem> get items => List.unmodifiable(_items);
 
   int get totalItems => _items.fold(0, (sum, it) => sum + it.qty);
+
+  int? _tableId;
+  int? get tableId => _tableId;
+  void setTableId(int? id) {
+    _tableId = id;
+    notifyListeners();
+  }
+
+  OrderType _orderType = OrderType.takeAway;
+  OrderType get orderType => _orderType;
+  void setOrderType(OrderType type) {
+    _orderType = type;
+    if (type == OrderType.takeAway) {
+      _tableId = null;
+    }
+    notifyListeners();
+  }
 
 
   void add(CartItem item) {

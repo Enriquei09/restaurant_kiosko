@@ -77,10 +77,9 @@ class ProductsSelected extends StatelessWidget {
                         child: ElevatedButton(
                            onPressed: () {
                             Navigator.pop(context); // cierra el diálogo
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const CheckoutScreen()),
-                            );
+                            final cart = context.read<CartModel>();
+                            // Skip Table Input for "Automatic" flow (Option A)
+                            Navigator.pushNamed(context, '/checkout');
                           },                          
                           
                           child: const Text('Confirmar'),

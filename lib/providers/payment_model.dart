@@ -34,6 +34,8 @@ class PaymentModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void reset() => clear();
+
   bool get isCash => _method == PaymentMethod.cash;
   bool get isCard => _method == PaymentMethod.card;
 }

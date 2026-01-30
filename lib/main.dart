@@ -10,6 +10,13 @@ import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart';
 import 'package:restaurant_kiosco/providers/restaurant_provider.dart';
+import 'package:restaurant_kiosco/providers/table_provider.dart';
+import 'package:restaurant_kiosco/presentation/screens/waiter/waiter_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/kiosk/order_type_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/kiosk/table_input_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/kiosk/kiosk_table_selection_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/runner/runner_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +28,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => PaymentModel()),
         ChangeNotifierProvider(create: (_) => TipModel()),
         ChangeNotifierProvider(create: (_) => RestaurantProvider()),
+        ChangeNotifierProvider(create: (_) => TableProvider()),
       ],
       child: const MyApp(),
     ),
@@ -47,6 +55,12 @@ class MyApp extends StatelessWidget {
         '/menu': (context) => const MenuScreen(),
         '/kitchen': (context) => const KitchenScreen(),
         '/cashier': (context) => const CashierScreen(),
+        '/waiter': (context) => const WaiterScreen(),
+        '/runner': (context) => const RunnerScreen(),
+        '/kiosk/order-type': (context) => const OrderTypeScreen(),
+        '/kiosk/table-input': (context) => const TableInputScreen(),
+        '/kiosk/table-selection': (context) => const KioskTableSelectionScreen(),
+        '/checkout': (context) => const CheckoutScreen(),
         '/restaurant-selection': (context) => const RestaurantSelectionScreen(),
       },
     );
@@ -80,26 +94,47 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   _buildOptionCard(
                     context,
-                    title: 'KIOSKO\nCliente',
+                    title: 'KIOSKO',
+                    subtitle: 'Cliente',
                     icon: Icons.touch_app,
                     color: Colors.blue,
-                    onTap: () => Navigator.pushNamed(context, '/menu'),
+                    onTap: () => Navigator.pushNamed(context, '/kiosk/order-type'),
                   ),
-                  const SizedBox(width: 32),
+                  const SizedBox(width: 24),
                   _buildOptionCard(
                     context,
-                    title: 'CAJA\nCobro',
+                    title: 'MESERO',
+                    subtitle: 'Mesas',
+                    icon: Icons.table_restaurant,
+                    color: Colors.orange.shade800,
+                    onTap: () => Navigator.pushNamed(context, '/waiter'),
+                  ),
+                  const SizedBox(width: 24),
+                  _buildOptionCard(
+                    context,
+                    title: 'COCINA',
+                    subtitle: 'Pedidos',
+                    icon: Icons.kitchen,
+                    color: Colors.orange,
+                    onTap: () => Navigator.pushNamed(context, '/kitchen'),
+                  ),
+                  const SizedBox(width: 24),
+                  _buildOptionCard(
+                    context,
+                    title: 'CAJA',
+                    subtitle: 'Cobro',
                     icon: Icons.point_of_sale,
                     color: Colors.green,
                     onTap: () => Navigator.pushNamed(context, '/cashier'),
                   ),
-                  const SizedBox(width: 32),
+                  const SizedBox(width: 24),
                   _buildOptionCard(
                     context,
-                    title: 'COCINA\nPedidos',
-                    icon: Icons.kitchen,
-                    color: Colors.orange,
-                    onTap: () => Navigator.pushNamed(context, '/kitchen'),
+                    title: 'ENTREGAR',
+                    subtitle: 'Runner',
+                    icon: Icons.delivery_dining,
+                    color: Colors.teal,
+                    onTap: () => Navigator.pushNamed(context, '/runner'),
                   ),
                 ],
               ),
@@ -113,6 +148,7 @@ class HomeScreen extends StatelessWidget {
   Widget _buildOptionCard(
     BuildContext context, {
     required String title,
+    required String subtitle,
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
@@ -121,8 +157,8 @@ class HomeScreen extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        width: 250,
-        height: 300,
+        width: 180, // Slightly smaller to fit 4
+        height: 220,
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(16),
@@ -131,15 +167,24 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 80, color: color),
-            const SizedBox(height: 24),
+            Icon(icon, size: 64, color: color),
+            const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: color,
+              ),
+            ),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: color.withOpacity(0.8),
               ),
             ),
           ],
