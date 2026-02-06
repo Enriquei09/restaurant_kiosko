@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
+import 'package:restaurant_kiosco/providers/pos_provider.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
 
@@ -110,6 +111,9 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
 
                                 // Obtener configuración del restaurante
                                 final restaurantId = await ConfigurationService.getRestaurantId();
+                                final posProvider = context.read<PosProvider>();
+                                final currentCashRegisterId = posProvider.currentCashRegister?.id;
+                                final currentUserId = posProvider.userId;
 
                                 // Enviar orden al backend
                                 await ApiService.createOrder(
@@ -117,6 +121,8 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
                                   clientName: payment.clientName,
                                   clientPhone: payment.clientPhone,
                                   paymentMethod: 'card_kiosk',
+                                  cashRegisterId: currentCashRegisterId,
+                                  waiterId: currentUserId,
                                   items: orderItems,
                                   total: total,
                                   tip: tipAmount,

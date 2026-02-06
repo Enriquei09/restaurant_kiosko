@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/presentation/widgets/edit_cart_item_dialog.dart';
-import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.dart';
 
 class ProductsSelected extends StatelessWidget {
   const ProductsSelected({super.key});
@@ -77,7 +76,6 @@ class ProductsSelected extends StatelessWidget {
                         child: ElevatedButton(
                            onPressed: () {
                             Navigator.pop(context); // cierra el diálogo
-                            final cart = context.read<CartModel>();
                             // Skip Table Input for "Automatic" flow (Option A)
                             Navigator.pushNamed(context, '/checkout');
                           },                          

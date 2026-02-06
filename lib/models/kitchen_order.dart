@@ -1,17 +1,22 @@
 class KitchenOrder {
   final int id;
+  final String orderNumber;
   final String status;
+  final String paymentStatus;
   final String? clientName;
   final String? clientPhone;
   final double total;
   final double tip;
-  final String createdAt;
+  final DateTime createdAt;
   final List<KitchenOrderItem> items;
   final String? tableName;
+  final String? tableNumber;
 
   KitchenOrder({
     required this.id,
+    required this.orderNumber,
     required this.status,
+    required this.paymentStatus,
     this.clientName,
     this.clientPhone,
     required this.total,
@@ -19,18 +24,24 @@ class KitchenOrder {
     required this.createdAt,
     required this.items,
     this.tableName,
+    this.tableNumber,
   });
 
   factory KitchenOrder.fromJson(Map<String, dynamic> json) {
     return KitchenOrder(
       id: json['id'],
+      orderNumber: json['order_number']?.toString() ?? json['id'].toString(),
       status: json['status'],
+      paymentStatus: json['payment_status'] ?? 'pending',
       clientName: json['client']?['name'],
       clientPhone: json['client']?['phone'],
       tableName: json['table']?['name'],
+      tableNumber: json['table']?['table_number']?.toString(),
       total: double.parse(json['total'].toString()),
       tip: double.parse(json['tip'].toString()),
-      createdAt: json['created_at'],
+      createdAt: json['created_at'] is String 
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
       items: (json['order_details'] as List)
           .map((item) => KitchenOrderItem.fromJson(item))
           .toList(),
@@ -50,13 +61,9 @@ class KitchenOrder {
     }
   }
 
-  // Helper para DateTime
-  DateTime get createdDateTime {
-    return DateTime.parse(createdAt); // Assuming ISO or parseable format from Laravel
-  }
-
+  // Helper para determinar minutos transcurridos
   int get elapsedMinutes {
-    return DateTime.now().difference(createdDateTime).inMinutes;
+    return DateTime.now().difference(createdAt).inMinutes;
   }
 
   // Helper para determinar "Comer Aquí" vs "Para Llevar"

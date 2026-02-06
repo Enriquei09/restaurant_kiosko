@@ -6,11 +6,14 @@ import 'package:restaurant_kiosco/presentation/screens/kitchen/kitchen_screen.da
 import 'package:restaurant_kiosco/presentation/screens/cashier/cashier_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/splash_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/restaurant_selection_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/terminal_selection_screen.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart';
 import 'package:restaurant_kiosco/providers/restaurant_provider.dart';
 import 'package:restaurant_kiosco/providers/table_provider.dart';
+import 'package:restaurant_kiosco/providers/cash_register_provider.dart';
+import 'package:restaurant_kiosco/providers/pos_provider.dart';
 import 'package:restaurant_kiosco/presentation/screens/waiter/waiter_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/kiosk/order_type_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/kiosk/table_input_screen.dart';
@@ -29,6 +32,8 @@ void main() {
         ChangeNotifierProvider(create: (_) => TipModel()),
         ChangeNotifierProvider(create: (_) => RestaurantProvider()),
         ChangeNotifierProvider(create: (_) => TableProvider()),
+        ChangeNotifierProvider(create: (_) => CashRegisterProvider()),
+        ChangeNotifierProvider(create: (_) => PosProvider()),
       ],
       child: const MyApp(),
     ),
@@ -55,6 +60,7 @@ class MyApp extends StatelessWidget {
         '/menu': (context) => const MenuScreen(),
         '/kitchen': (context) => const KitchenScreen(),
         '/cashier': (context) => const CashierScreen(),
+        '/terminal-selection': (context) => const TerminalSelectionScreen(),
         '/waiter': (context) => const WaiterScreen(),
         '/runner': (context) => const RunnerScreen(),
         '/kiosk/order-type': (context) => const OrderTypeScreen(),
@@ -125,7 +131,7 @@ class HomeScreen extends StatelessWidget {
                     subtitle: 'Cobro',
                     icon: Icons.point_of_sale,
                     color: Colors.green,
-                    onTap: () => Navigator.pushNamed(context, '/cashier'),
+                    onTap: () => Navigator.pushNamed(context, '/terminal-selection'),
                   ),
                   const SizedBox(width: 24),
                   _buildOptionCard(

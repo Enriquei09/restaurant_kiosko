@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/presentation/screens/cashier/tables_screen.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
-import 'package:restaurant_kiosco/models/table_model.dart';
 
 class KioskTableSelectionScreen extends StatelessWidget {
   const KioskTableSelectionScreen({super.key});

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/models/table_model.dart';
-import 'package:restaurant_kiosco/presentation/screens/menu/menu_screen.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/table_provider.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
+import '../table_detail_screen.dart';
 
 class TablesScreen extends StatefulWidget {
   final void Function(BuildContext context, RestaurantTable table)? onTableSelected;
@@ -67,16 +67,23 @@ class _TablesScreenState extends State<TablesScreen> {
                   if (widget.onTableSelected != null) {
                     widget.onTableSelected!(context, table);
                   } else {
-                    // Default Waiter Behavior
+                    // Si la mesa está ocupada, mostrar detalle
                     if (isOccupied) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Agregando productos a Mesa ${table.name}'),
-                          duration: const Duration(seconds: 1),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => TableDetailScreen(
+                            tableId: table.id,
+                            tableName: table.name,
+                          ),
                         ),
-                      );
-                      _openTable(context, table.id);
+                      ).then((value) {
+                        if (value == true) {
+                          _loadTables(); // Recargar mesas si hubo cambios
+                        }
+                      });
                     } else {
+                      // Mesa disponible: abrir para nueva orden
                       _openTable(context, table.id);
                     }
                   }

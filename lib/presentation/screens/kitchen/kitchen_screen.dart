@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/models/kitchen_order.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
+import 'package:restaurant_kiosco/providers/pos_provider.dart';
 
 class KitchenScreen extends StatefulWidget {
   const KitchenScreen({super.key});
@@ -89,6 +91,10 @@ class _KitchenScreenState extends State<KitchenScreen> {
     // Completed = ready + delivered
     final activeCount = (counts['confirmed'] ?? 0) + (counts['preparing'] ?? 0);
     final completedCount = (counts['ready'] ?? 0) + (counts['delivered'] ?? 0);
+    
+    final posProvider = Provider.of<PosProvider>(context, listen: false);
+    final userName = posProvider.currentCashRegister?.user?.name ?? 'Usuario';
+    final userRole = 'Cocinero'; // TODO: Obtener del rol real
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -129,10 +135,32 @@ class _KitchenScreenState extends State<KitchenScreen> {
             ),
             const Spacer(),
             
-            // User Profile (Mock)
-            CircleAvatar(
-              backgroundColor: Colors.grey.shade200,
-              child: const Icon(Icons.person, color: Colors.black),
+            // User Profile con nombre
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.grey.shade300,
+                    radius: 16,
+                    child: const Icon(Icons.person, color: Colors.black, size: 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$userRole - $userName',
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -220,7 +248,7 @@ class KitchenOrderCard extends StatelessWidget {
       headerColor = const Color(0xFF1B1B1B); // Blackish
     }
 
-    final timeStr = "${order.createdDateTime.hour}:${order.createdDateTime.minute.toString().padLeft(2,'0')}";
+    final timeStr = "${order.createdAt.hour}:${order.createdAt.minute.toString().padLeft(2,'0')}";
 
     return Card(
       elevation: 4,

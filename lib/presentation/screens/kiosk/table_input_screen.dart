@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/table_provider.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
-import 'package:restaurant_kiosco/models/table_model.dart';
 
 class TableInputScreen extends StatefulWidget {
   const TableInputScreen({super.key});

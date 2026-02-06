@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
+import 'package:restaurant_kiosco/providers/pos_provider.dart';
 import 'package:restaurant_kiosco/presentation/pages/payment/payment_screen.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
-import 'package:restaurant_kiosco/providers/restaurant_provider.dart' as provider;
 import 'package:restaurant_kiosco/providers/tip_model.dart' as provider;
-import 'package:restaurant_kiosco/presentation/screens/kiosk/order_success_screen.dart';
 
 class PaymentMethodCard extends StatefulWidget {
   const PaymentMethodCard({super.key});
@@ -215,7 +214,6 @@ class _PaymentMethodCardState extends State<PaymentMethodCard> {
 
       final cart = context.read<CartModel>();
       final payment = context.read<PaymentModel>();
-      final restaurantId = await context.read<provider.RestaurantProvider>().getRestaurantId(); // Assuming provider has this or use ConfigService
       // Better use ConfigurationService directly if Provider is not set up perfectly or just use hardcoded for now?
       // Actually CartModel might allow getting restaurantId? No.
       // Let's use ConfigurationService.
@@ -260,12 +258,19 @@ class _PaymentMethodCardState extends State<PaymentMethodCard> {
            items[0]['notes'] = "$orderType $firstNote";
         }
 
+        // Obtener caja actual del PosProvider si existe
+        final posProvider = Provider.of<PosProvider>(context, listen: false);
+        final currentCashRegisterId = posProvider.currentCashRegister?.id;
+        final currentUserId = posProvider.userId; // Mesero responsable
+
         await ApiService.createOrder(
           restaurantId: restaurantId,
           clientName: payment.clientName,
           clientPhone: payment.clientPhone,
           paymentMethod: null, // Open Tab
           tableId: cart.tableId,
+          cashRegisterId: currentCashRegisterId, // Asignar caja automáticamente
+          waiterId: currentUserId, // Mesero responsable
           items: items,
           total: total, // Validation might fail if mismatch, but backend usually trusts frontend or recalcs
           tip: tipAmount,

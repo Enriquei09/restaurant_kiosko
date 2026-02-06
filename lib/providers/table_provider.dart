@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/table_model.dart';
-import '../service/api_service.dart';
 
 class TableProvider extends ChangeNotifier {
   List<RestaurantTable> _tables = [];

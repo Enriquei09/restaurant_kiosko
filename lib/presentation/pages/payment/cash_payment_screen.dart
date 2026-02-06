@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
+import 'package:restaurant_kiosco/providers/pos_provider.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
 
@@ -84,12 +85,17 @@ class _CashPaymentScreenState extends State<CashPaymentScreen> {
                                 }).toList();
 
                                 final restaurantId = await ConfigurationService.getRestaurantId();
+                                final posProvider = context.read<PosProvider>();
+                                final currentCashRegisterId = posProvider.currentCashRegister?.id;
+                                final currentUserId = posProvider.userId;
 
                                 final response = await ApiService.createOrder(
                                   restaurantId: restaurantId,
                                   clientName: payment.clientName,
                                   clientPhone: payment.clientPhone,
                                   paymentMethod: 'cash',
+                                  cashRegisterId: currentCashRegisterId,
+                                  waiterId: currentUserId,
                                   items: orderItems,
                                   total: total,
                                   tip: tipAmount,
