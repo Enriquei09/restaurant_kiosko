@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:restaurant_kiosco/models/modifiers.dart';
 import 'package:restaurant_kiosco/models/kitchen_order.dart';
+import 'package:restaurant_kiosco/models/promotion.dart';
+import 'package:restaurant_kiosco/models/screensaver_config.dart';
 import '../models/category.dart';
 import '../models/restaurant.dart';
 import '../constants.dart';
@@ -9,7 +11,79 @@ import '../constants.dart';
 
 class ApiService {
 
-  // Método para obtener todas las categorías
+  // ── Token de autenticación global ─────────────────────────
+  static String _authToken = '';
+
+  /// Configurar el token de autenticación para todas las requests.
+  static void setAuthToken(String token) {
+    _authToken = token;
+  }
+
+  /// Headers base para todas las requests.
+  static Map<String, String> get _headers => {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    if (_authToken.isNotEmpty) 'Authorization': 'Bearer $_authToken',
+  };
+
+  /// Headers solo para GET (sin Content-Type).
+  static Map<String, String> get _getHeaders => {
+    'Accept': 'application/json',
+    if (_authToken.isNotEmpty) 'Authorization': 'Bearer $_authToken',
+  };
+
+  // ==================== AUTH ====================
+
+  /// Login con PIN — retorna token + usuario con rol y permisos.
+  static Future<Map<String, dynamic>> loginByPin({
+    required String pin,
+    required int restaurantId,
+  }) async {
+    final url = Uri.parse('$baseUrl/auth/login-pin');
+    final res = await http.post(
+      url,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'pin': pin,
+        'restaurant_id': restaurantId,
+      }),
+    );
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    } else if (res.statusCode == 401 || res.statusCode == 403) {
+      final error = jsonDecode(res.body);
+      return {
+        'success': false,
+        'message': error['message'] ?? 'PIN inválido',
+      };
+    } else {
+      throw Exception('Error de autenticación: ${res.statusCode}');
+    }
+  }
+
+  /// Logout — revocar token.
+  static Future<void> logout() async {
+    final url = Uri.parse('$baseUrl/auth/logout');
+    await http.post(url, headers: _headers);
+  }
+
+  /// Obtener datos del usuario autenticado.
+  static Future<Map<String, dynamic>> getMe() async {
+    final url = Uri.parse('$baseUrl/auth/me');
+    final res = await http.get(url, headers: _getHeaders);
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    } else {
+      throw Exception('No autenticado');
+    }
+  }
+
+  // ==================== CATEGORIES ====================
   static Future<List<Category>> fetchCategories() async {
     final response = await http.get(Uri.parse('$baseUrl/categories'));
 
@@ -23,7 +97,7 @@ class ApiService {
 
   // Método para obtener una categoría con productGroups y products
   static Future<Category> fetchCategoryWithProducts(int id) async {
-    final response = await http.get(Uri.parse('$baseUrl/categories/$id'));
+    final response = await http.get(Uri.parse('$baseUrl/categories/$id'), headers: _getHeaders);
 
     if (response.statusCode == 200) {
       final Map<String, dynamic> json = jsonDecode(response.body);
@@ -35,10 +109,7 @@ class ApiService {
 
   static Future<List<ModifierGroup>> fetchModifierGroups(int productId) async {
     final url = Uri.parse('$baseUrl/products/$productId/modifiers/grouped');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error ${res.statusCode}: ${res.body}');
@@ -61,7 +132,7 @@ class ApiService {
     };
     
     final url = Uri.parse('$baseUrl/kitchen/orders').replace(queryParameters: params);
-    final res = await http.get(url, headers: {'Accept': 'application/json'});
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error ${res.statusCode}: ${res.body}');
@@ -78,10 +149,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/kitchen/orders/$orderId/status');
     final res = await http.patch(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({'status': status}),
     );
 
@@ -106,10 +174,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/orders');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'restaurant_id': restaurantId,
         'client_name': clientName,
@@ -139,10 +204,7 @@ class ApiService {
   // Método para obtener información de un restaurante
   static Future<Restaurant> fetchRestaurant(int restaurantId) async {
     final url = Uri.parse('$baseUrl/restaurants/$restaurantId');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error ${res.statusCode}: ${res.body}');
@@ -156,13 +218,27 @@ class ApiService {
     return Restaurant.fromJson(data['data']);
   }
 
+  // Obtener configuración/settings de un restaurante
+  static Future<Map<String, dynamic>> fetchRestaurantSettings(int restaurantId) async {
+    final url = Uri.parse('$baseUrl/restaurants/$restaurantId/settings');
+    final res = await http.get(url, headers: _getHeaders);
+
+    if (res.statusCode != 200) {
+      throw Exception('Error ${res.statusCode}: ${res.body}');
+    }
+
+    final data = jsonDecode(res.body);
+    if (data['success'] != true) {
+      throw Exception('Error: ${data['message']}');
+    }
+
+    return data['data'] as Map<String, dynamic>;
+  }
+
   // Método para obtener restaurantes de un tenant
   static Future<List<Restaurant>> fetchTenantRestaurants(int tenantId) async {
     final url = Uri.parse('$baseUrl/tenants/$tenantId/restaurants');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error ${res.statusCode}: ${res.body}');
@@ -187,10 +263,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/orders/$orderId/pay');
     final res = await http.patch(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'payment_method': paymentMethod,
         'tip': tip,
@@ -206,10 +279,7 @@ class ApiService {
   // Obtener orden actual de una mesa
   static Future<Map<String, dynamic>?> getTableCurrentOrder(int tableId) async {
     final url = Uri.parse('$baseUrl/orders/table/$tableId/current');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
@@ -223,10 +293,7 @@ class ApiService {
   // Obtener órdenes pendientes de pago (para cashier)
   static Future<List<Map<String, dynamic>>> fetchPendingPaymentOrders(int restaurantId) async {
     final url = Uri.parse('$baseUrl/orders?restaurant_id=$restaurantId&payment_status=pending');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error al obtener órdenes pendientes: ${res.body}');
@@ -248,10 +315,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/orders/$orderId/add-items');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({'items': items}),
     );
 
@@ -274,7 +338,7 @@ class ApiService {
         'user_id': userId.toString(),
         'restaurant_id': restaurantId.toString(),
       }),
-      headers: {'Accept': 'application/json'},
+      headers: _getHeaders,
     );
 
     if (res.statusCode == 200) {
@@ -298,10 +362,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/cash-registers/open');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'tenant_id': tenantId,
         'restaurant_id': restaurantId,
@@ -327,12 +388,7 @@ class ApiService {
     required int restaurantId,
   }) async {
     final url = Uri.parse('$baseUrl/cash-registers/terminals?tenant_id=$tenantId&restaurant_id=$restaurantId');
-    final res = await http.get(
-      url,
-      headers: {
-        'Accept': 'application/json',
-      },
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -351,10 +407,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/cash-registers/authenticate-pin');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'tenant_id': tenantId,
         'restaurant_id': restaurantId,
@@ -384,10 +437,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/cash-registers/$cashRegisterId/close');
     final res = await http.patch(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'closing_balance': closingBalance,
         'closing_notes': closingNotes,
@@ -406,10 +456,7 @@ class ApiService {
   static Future<Map<String, dynamic>> getCashRegisterReport(
       int cashRegisterId) async {
     final url = Uri.parse('$baseUrl/cash-registers/$cashRegisterId/report');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -428,10 +475,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/auth/verify-supervisor');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'pin': pin,
         'restaurant_id': restaurantId,
@@ -460,10 +504,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/payments/orders/$orderId/process');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'payments': payments,
         'tip': tip,
@@ -481,10 +522,7 @@ class ApiService {
   /// Obtener pagos de una orden
   static Future<Map<String, dynamic>> getOrderPayments(int orderId) async {
     final url = Uri.parse('$baseUrl/payments/orders/$orderId');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -508,10 +546,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/discounts/orders/$orderId');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'applied_by': appliedBy,
         'type': type,
@@ -535,10 +570,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/discounts/$discountId/authorize');
     final res = await http.patch(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({'supervisor_id': supervisorId}),
     );
 
@@ -552,10 +584,7 @@ class ApiService {
   /// Obtener descuentos pendientes
   static Future<Map<String, dynamic>> getPendingDiscounts() async {
     final url = Uri.parse('$baseUrl/discounts/pending');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -580,10 +609,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/refunds');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'order_id': orderId,
         'order_detail_id': orderDetailId,
@@ -609,10 +635,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/refunds/$refundId/authorize');
     final res = await http.patch(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({'supervisor_id': supervisorId}),
     );
 
@@ -626,10 +649,7 @@ class ApiService {
   /// Completar devolución
   static Future<Map<String, dynamic>> completeRefund(int refundId) async {
     final url = Uri.parse('$baseUrl/refunds/$refundId/complete');
-    final res = await http.patch(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.patch(url, headers: _headers);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -641,10 +661,7 @@ class ApiService {
   /// Obtener devoluciones pendientes
   static Future<Map<String, dynamic>> getPendingRefunds() async {
     final url = Uri.parse('$baseUrl/refunds/pending');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -656,10 +673,7 @@ class ApiService {
   /// Obtener devoluciones de una orden
   static Future<Map<String, dynamic>> getOrderRefunds(int orderId) async {
     final url = Uri.parse('$baseUrl/refunds/orders/$orderId');
-    final res = await http.get(
-      url,
-      headers: {'Accept': 'application/json'},
-    );
+    final res = await http.get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -681,10 +695,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/orders/$orderId/void');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'supervisor_id': supervisorId,
         'reason': reason,
@@ -708,10 +719,7 @@ class ApiService {
     final url = Uri.parse('$baseUrl/orders/$orderId/items/$detailId/courtesy');
     final res = await http.post(
       url,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers,
       body: jsonEncode({
         'supervisor_id': supervisorId,
         'reason': reason,
@@ -722,6 +730,135 @@ class ApiService {
       return jsonDecode(res.body);
     } else {
       throw Exception('Error al marcar como cortesía: ${res.body}');
+    }
+  }
+
+  // ==================== MENÚ COMPLETO ====================
+
+  /// Obtener el menú completo del restaurante (categorías → subcategorías → productos + promos).
+  static Future<List<Map<String, dynamic>>> fetchMenu(int restaurantId) async {
+    final url = Uri.parse('$baseUrl/restaurants/$restaurantId/menu');
+    final res = await http.get(url, headers: _getHeaders);
+
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body);
+      return List<Map<String, dynamic>>.from(body['data'] ?? []);
+    } else {
+      throw Exception('Error al cargar el menú: ${res.statusCode}');
+    }
+  }
+
+  // ==================== PROMOCIONES ====================
+
+  /// Obtener promociones activas del restaurante.
+  static Future<List<Promotion>> fetchActivePromotions(int restaurantId) async {
+    final url = Uri.parse('$baseUrl/restaurants/$restaurantId/promotions');
+    final res = await http.get(url, headers: _getHeaders);
+
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body);
+      final list = body['data'] as List? ?? [];
+      return list.map((e) => Promotion.fromJson(e)).toList();
+    } else {
+      throw Exception('Error al cargar promociones: ${res.statusCode}');
+    }
+  }
+
+  /// Validar carrito contra promociones.
+  static Future<CartPromotionResult> validateCartPromotions({
+    required int restaurantId,
+    required List<Map<String, dynamic>> items,
+    int? userId,
+  }) async {
+    final url = Uri.parse('$baseUrl/promotions/validate-cart');
+    final res = await http.post(
+      url,
+      headers: _headers,
+      body: jsonEncode({
+        'restaurant_id': restaurantId,
+        'items': items,
+        if (userId != null) 'user_id': userId,
+      }),
+    );
+
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body);
+      return CartPromotionResult.fromJson(body['data']);
+    } else {
+      throw Exception('Error al validar promociones: ${res.body}');
+    }
+  }
+
+  /// Aplicar promociones a una orden (registrar uso).
+  static Future<Map<String, dynamic>> applyPromotions({
+    required int orderId,
+    required List<Map<String, dynamic>> promotions,
+    int? userId,
+  }) async {
+    final url = Uri.parse('$baseUrl/promotions/apply');
+    final res = await http.post(
+      url,
+      headers: _headers,
+      body: jsonEncode({
+        'order_id': orderId,
+        'promotions': promotions,
+        if (userId != null) 'user_id': userId,
+      }),
+    );
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    } else {
+      throw Exception('Error al aplicar promociones: ${res.body}');
+    }
+  }
+
+  // ==================== SCREENSAVER ====================
+
+  /// Obtener configuración e imágenes del screensaver.
+  static Future<ScreensaverConfig> fetchScreensaver(int restaurantId) async {
+    final url = Uri.parse('$baseUrl/restaurants/$restaurantId/screensaver');
+    final res = await http.get(url, headers: _getHeaders);
+
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body);
+      return ScreensaverConfig.fromJson(body['data']);
+    } else {
+      throw Exception('Error al cargar screensaver: ${res.statusCode}');
+    }
+  }
+
+  // ==================== TABLES ====================
+
+  /// Obtener lista de mesas de un restaurante (con estado).
+  static Future<List<Map<String, dynamic>>> fetchTables(int restaurantId, {int? locationId}) async {
+    final queryParams = {
+      'restaurant_id': restaurantId.toString(),
+      if (locationId != null) 'location_id': locationId.toString(),
+    };
+    final url = Uri.parse('$baseUrl/tables').replace(queryParameters: queryParams);
+    final res = await http.get(url, headers: _getHeaders);
+
+    if (res.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+    } else {
+      throw Exception('Error al cargar mesas: ${res.statusCode}');
+    }
+  }
+
+  /// Actualizar estado de una mesa (available, occupied, reserved, etc.).
+  static Future<Map<String, dynamic>> updateTableStatus(int tableId, String status) async {
+    final url = Uri.parse('$baseUrl/tables/$tableId');
+    final res = await http.put(
+      url,
+      headers: _headers,
+      body: jsonEncode({'status': status}),
+    );
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    } else {
+      throw Exception('Error al actualizar mesa: ${res.statusCode}');
     }
   }
 }

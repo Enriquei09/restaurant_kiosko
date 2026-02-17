@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/presentation/widgets/edit_cart_item_dialog.dart';
+import 'package:restaurant_kiosco/presentation/widgets/promotion_widgets.dart';
 
 class ProductsSelected extends StatelessWidget {
   const ProductsSelected({super.key});
@@ -59,6 +60,12 @@ class ProductsSelected extends StatelessWidget {
                     ),
             ),
 
+            // Sugerencias de promoción
+            if (cart.promotionSuggestions.isNotEmpty)
+              ...cart.promotionSuggestions.map((s) => PromotionSuggestionBanner(
+                    message: s.message,
+                  )),
+
             const Divider(height: 1),
 
             // Totales + acciones
@@ -66,8 +73,27 @@ class ProductsSelected extends StatelessWidget {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
+                  // Descuentos aplicados
+                  if (cart.appliedPromotions.isNotEmpty)
+                    PromotionDiscountSummary(
+                      promotions: cart.appliedPromotions
+                          .map((p) => (
+                                name: p.name,
+                                badge: p.badgeLabel,
+                                discount: p.discount,
+                              ))
+                          .toList(),
+                      totalDiscount: cart.promotionDiscount,
+                    ),
                   _total('Subtotal', cart.subtotal),
+                  if (cart.promotionDiscount > 0)
+                    _total('Descuento', -cart.promotionDiscount, isDiscount: true),
                   _total('IVA (16%)', cart.tax),
+                  if (cart.loadingPromotions)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4),
+                      child: LinearProgressIndicator(),
+                    ),
                   _total('Total', cart.total, bold: true),
                   const SizedBox(height: 12),
                   Row(
@@ -101,15 +127,20 @@ class ProductsSelected extends StatelessWidget {
     );
   }
 
-  Widget _total(String label, double value, {bool bold = false}) {
-    final style = bold ? const TextStyle(fontWeight: FontWeight.w700) : null;
+  Widget _total(String label, double value, {bool bold = false, bool isDiscount = false}) {
+    final style = bold
+        ? const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)
+        : isDiscount
+            ? TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.w600)
+            : null;
+    final prefix = isDiscount ? '-' : '';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: style),
-          Text('\$${value.toStringAsFixed(2)}', style: style),
+          Text('$prefix\$${value.abs().toStringAsFixed(2)}', style: style),
         ],
       ),
     );

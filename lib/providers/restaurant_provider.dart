@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/restaurant.dart';
+import '../models/restaurant_config.dart';
+import '../models/screensaver_config.dart';
 import '../service/api_service.dart';
 
 class RestaurantProvider extends ChangeNotifier {
   int? _currentRestaurantId;
   int? _currentTenantId;
   Restaurant? _currentRestaurant;
+  RestaurantConfig _config = RestaurantConfig.defaults();
+  ScreensaverConfig _screensaverConfig = const ScreensaverConfig();
   List<Restaurant> _availableRestaurants = [];
   bool _isLoading = false;
   String? _error;
@@ -19,6 +23,21 @@ class RestaurantProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasSelection => _currentRestaurantId != null && _currentTenantId != null;
+
+  /// Configuración del restaurante (colores, moneda, impuestos, etc.)
+  RestaurantConfig get config => _config;
+
+  /// Configuración del screensaver.
+  ScreensaverConfig get screensaverConfig => _screensaverConfig;
+  bool get screensaverEnabled => _screensaverConfig.isActive;
+  Duration get screensaverTimeout =>
+      Duration(seconds: _screensaverConfig.timeoutSeconds);
+
+  /// ThemeData generado desde los colores del restaurante.
+  ThemeData get themeData => _config.toThemeData();
+
+  /// Color primario del restaurante.
+  Color get primaryColor => _config.primaryColor;
 
   /// Inicializar desde SharedPreferences
   Future<void> initialize() async {
@@ -73,6 +92,26 @@ class RestaurantProvider extends ChangeNotifier {
       debugPrint('Fetching restaurant from API...');
       _currentRestaurant = await ApiService.fetchRestaurant(_currentRestaurantId!);
       debugPrint('Restaurant fetched: ${_currentRestaurant?.name}');
+
+      // Cargar configuración (colores, impuestos, features, etc.)
+      try {
+        final settingsJson = await ApiService.fetchRestaurantSettings(_currentRestaurantId!);
+        _config = RestaurantConfig.fromJson(settingsJson);
+        debugPrint('Restaurant config loaded: ${_config.displayName}');
+      } catch (e) {
+        debugPrint('Could not load restaurant settings, using defaults: $e');
+        _config = RestaurantConfig.defaults();
+      }
+
+      // Cargar configuración del screensaver
+      try {
+        _screensaverConfig = await ApiService.fetchScreensaver(_currentRestaurantId!);
+        debugPrint('Screensaver loaded: ${_screensaverConfig.images.length} images, enabled: ${_screensaverConfig.enabled}');
+      } catch (e) {
+        debugPrint('Could not load screensaver config: $e');
+        _screensaverConfig = const ScreensaverConfig();
+      }
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {

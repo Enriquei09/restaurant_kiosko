@@ -2,12 +2,27 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cart_item.dart';
+import '../models/promotion.dart';
+import '../service/api_service.dart';
 
 enum OrderType { dineIn, takeAway }
 
 class CartModel extends ChangeNotifier {
   final List<CartItem> _items = [];
   double taxRate = 0.16;
+
+  // ── Promotions ────────────────────────────────
+  CartPromotionResult? _promotionResult;
+  CartPromotionResult? get promotionResult => _promotionResult;
+
+  bool _loadingPromotions = false;
+  bool get loadingPromotions => _loadingPromotions;
+
+  int? _restaurantId;
+
+  void setRestaurantId(int id) {
+    _restaurantId = id;
+  }
 
   List<CartItem> get items => List.unmodifiable(_items);
 
@@ -44,6 +59,7 @@ class CartModel extends ChangeNotifier {
     }
     notifyListeners();
     save();
+    validatePromotions();
   }
 
   void decrease(int index) {
@@ -55,6 +71,7 @@ class CartModel extends ChangeNotifier {
     }
     notifyListeners();
     save();
+    validatePromotions();
   }
 
   void setQty(int index, int qty) {
@@ -65,14 +82,63 @@ class CartModel extends ChangeNotifier {
     }
     notifyListeners();
     save();
+    validatePromotions();
   }
 
-  void removeAt(int index) { _items.removeAt(index); notifyListeners(); save(); }
-  void clear() { _items.clear(); notifyListeners(); save(); }
+  void removeAt(int index) { _items.removeAt(index); notifyListeners(); save(); validatePromotions(); }
+  void clear() { _items.clear(); _promotionResult = null; notifyListeners(); save(); }
 
   double get subtotal => _items.fold(0, (s, it) => s + it.line);
-  double get tax => double.parse((subtotal * taxRate).toStringAsFixed(2));
-  double get total => subtotal + tax;
+  double get promotionDiscount => _promotionResult?.totalDiscount ?? 0;
+  double get subtotalAfterDiscount => subtotal - promotionDiscount;
+  double get tax => double.parse((subtotalAfterDiscount * taxRate).toStringAsFixed(2));
+  double get total => subtotalAfterDiscount + tax;
+
+  /// ¿Este producto tiene una promo aplicada en el carrito?
+  bool productHasActivePromo(int productId) {
+    if (_promotionResult == null) return false;
+    return _promotionResult!.applicable
+        .any((p) => p.affectedProducts.contains(productId));
+  }
+
+  /// Obtener sugerencias de promo (ej: "agrega otro para 2x1").
+  List<PromotionSuggestion> get promotionSuggestions =>
+      _promotionResult?.suggestions ?? [];
+
+  /// Promociones aplicadas al carrito.
+  List<ApplicablePromotion> get appliedPromotions =>
+      _promotionResult?.applicable ?? [];
+
+  /// Validar promociones contra el API.
+  Future<void> validatePromotions() async {
+    if (_restaurantId == null || _items.isEmpty) {
+      _promotionResult = null;
+      notifyListeners();
+      return;
+    }
+
+    _loadingPromotions = true;
+    notifyListeners();
+
+    try {
+      final cartItems = _items.map((item) => {
+        'product_id': item.productId,
+        'quantity': item.qty,
+        'price': item.unitPrice,
+      }).toList();
+
+      _promotionResult = await ApiService.validateCartPromotions(
+        restaurantId: _restaurantId!,
+        items: cartItems,
+      );
+    } catch (e) {
+      debugPrint('Error validando promociones: $e');
+      _promotionResult = null;
+    }
+
+    _loadingPromotions = false;
+    notifyListeners();
+  }
 
   // Persistencia
   Future<void> save() async {

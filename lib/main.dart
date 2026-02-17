@@ -14,12 +14,15 @@ import 'package:restaurant_kiosco/providers/restaurant_provider.dart';
 import 'package:restaurant_kiosco/providers/table_provider.dart';
 import 'package:restaurant_kiosco/providers/cash_register_provider.dart';
 import 'package:restaurant_kiosco/providers/pos_provider.dart';
+import 'package:restaurant_kiosco/providers/auth_provider.dart';
 import 'package:restaurant_kiosco/presentation/screens/waiter/waiter_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/kiosk/order_type_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/kiosk/table_input_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/kiosk/kiosk_table_selection_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/kiosk/kiosk_screen_wrapper.dart';
 import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/runner/runner_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/auth/login_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +30,7 @@ void main() {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => CartModel()..restore()),
         ChangeNotifierProvider(create: (_) => PaymentModel()),
         ChangeNotifierProvider(create: (_) => TipModel()),
@@ -45,29 +49,31 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'THALO Kiosk',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF3d5a80),
-        ),
-        useMaterial3: true,
-      ),
-      home: const SplashScreen(),
-      routes: {
-        '/home': (context) => const HomeScreen(),
-        '/menu': (context) => const MenuScreen(),
-        '/kitchen': (context) => const KitchenScreen(),
-        '/cashier': (context) => const CashierScreen(),
-        '/terminal-selection': (context) => const TerminalSelectionScreen(),
-        '/waiter': (context) => const WaiterScreen(),
-        '/runner': (context) => const RunnerScreen(),
-        '/kiosk/order-type': (context) => const OrderTypeScreen(),
-        '/kiosk/table-input': (context) => const TableInputScreen(),
-        '/kiosk/table-selection': (context) => const KioskTableSelectionScreen(),
-        '/checkout': (context) => const CheckoutScreen(),
-        '/restaurant-selection': (context) => const RestaurantSelectionScreen(),
+    return Consumer<RestaurantProvider>(
+      builder: (context, restaurantProvider, _) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: restaurantProvider.config.displayName.isNotEmpty
+              ? restaurantProvider.config.displayName
+              : 'THALO Kiosk',
+          theme: restaurantProvider.themeData,
+          home: const SplashScreen(),
+          routes: {
+            '/home': (context) => const HomeScreen(),
+            '/login': (context) => const LoginScreen(),
+            '/menu': (context) => const KioskScreenWrapper(child: MenuScreen()),
+            '/kitchen': (context) => const KitchenScreen(),
+            '/cashier': (context) => const CashierScreen(),
+            '/terminal-selection': (context) => const TerminalSelectionScreen(),
+            '/waiter': (context) => const WaiterScreen(),
+            '/runner': (context) => const RunnerScreen(),
+            '/kiosk/order-type': (context) => const KioskScreenWrapper(child: OrderTypeScreen()),
+            '/kiosk/table-input': (context) => const KioskScreenWrapper(child: TableInputScreen()),
+            '/kiosk/table-selection': (context) => const KioskScreenWrapper(child: KioskTableSelectionScreen()),
+            '/checkout': (context) => const CheckoutScreen(),
+            '/restaurant-selection': (context) => const RestaurantSelectionScreen(),
+          },
+        );
       },
     );
   }
@@ -78,26 +84,60 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = Provider.of<AuthProvider>(context);
+    final restaurantProvider = Provider.of<RestaurantProvider>(context);
+    final brandColor = restaurantProvider.primaryColor;
+    final restaurantName = restaurantProvider.config.displayName.isNotEmpty
+        ? restaurantProvider.config.displayName
+        : 'Sistema POS - Restaurante';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sistema POS - Restaurante'),
-        backgroundColor: const Color(0xFF3d5a80),
+        title: Text(restaurantName),
+        backgroundColor: brandColor,
         foregroundColor: Colors.white,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Selecciona tu Rol',
-                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+        actions: [
+          if (auth.isAuthenticated) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Center(
+                child: Text(
+                  '${auth.userName} (${auth.roleName})',
+                  style: const TextStyle(fontSize: 14),
+                ),
               ),
-              const SizedBox(height: 48),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Cerrar sesión',
+              onPressed: () async {
+                await auth.logout();
+                if (context.mounted) {
+                  Navigator.pushReplacementNamed(context, '/home');
+                }
+              },
+            ),
+          ],
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'Selecciona tu Rol',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 48),
+                Wrap(
+                  spacing: 24,
+                  runSpacing: 24,
+                  alignment: WrapAlignment.center,
+                  children: [
+                  // KIOSKO — siempre visible (acceso público para clientes)
                   _buildOptionCard(
                     context,
                     title: 'KIOSKO',
@@ -106,41 +146,64 @@ class HomeScreen extends StatelessWidget {
                     color: Colors.blue,
                     onTap: () => Navigator.pushNamed(context, '/kiosk/order-type'),
                   ),
-                  const SizedBox(width: 24),
+
+                  // MESERO — requiere login + can_take_orders
                   _buildOptionCard(
                     context,
                     title: 'MESERO',
                     subtitle: 'Mesas',
                     icon: Icons.table_restaurant,
                     color: Colors.orange.shade800,
-                    onTap: () => Navigator.pushNamed(context, '/waiter'),
+                    onTap: () => _navigateWithAuth(
+                      context,
+                      route: '/waiter',
+                      requiredPermission: 'can_take_orders',
+                      roleName: 'Mesero',
+                    ),
                   ),
-                  const SizedBox(width: 24),
+
+                  // COCINA — requiere login con rol cook/bar/admin
                   _buildOptionCard(
                     context,
                     title: 'COCINA',
                     subtitle: 'Pedidos',
                     icon: Icons.kitchen,
                     color: Colors.orange,
-                    onTap: () => Navigator.pushNamed(context, '/kitchen'),
+                    onTap: () => _navigateWithAuth(
+                      context,
+                      route: '/kitchen',
+                      requiredRoles: ['admin', 'supervisor', 'cook', 'bar'],
+                      roleName: 'Cocina',
+                    ),
                   ),
-                  const SizedBox(width: 24),
+
+                  // CAJA — requiere login + can_open_cash_register
                   _buildOptionCard(
                     context,
                     title: 'CAJA',
                     subtitle: 'Cobro',
                     icon: Icons.point_of_sale,
                     color: Colors.green,
-                    onTap: () => Navigator.pushNamed(context, '/terminal-selection'),
+                    onTap: () => _navigateWithAuth(
+                      context,
+                      route: '/terminal-selection',
+                      requiredPermission: 'can_open_cash_register',
+                      roleName: 'Cajero',
+                    ),
                   ),
-                  const SizedBox(width: 24),
+
+                  // ENTREGAR — requiere login
                   _buildOptionCard(
                     context,
                     title: 'ENTREGAR',
                     subtitle: 'Runner',
                     icon: Icons.delivery_dining,
                     color: Colors.teal,
-                    onTap: () => Navigator.pushNamed(context, '/runner'),
+                    onTap: () => _navigateWithAuth(
+                      context,
+                      route: '/runner',
+                      roleName: 'Runner',
+                    ),
                   ),
                 ],
               ),
@@ -148,6 +211,7 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -195,6 +259,63 @@ class HomeScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Navegar a una pantalla protegida.
+  /// Si no está autenticado, redirige a login.
+  /// Si está autenticado pero no tiene permiso, muestra error.
+  void _navigateWithAuth(
+    BuildContext context, {
+    required String route,
+    String? requiredPermission,
+    List<String>? requiredRoles,
+    required String roleName,
+  }) {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+
+    if (!auth.isAuthenticated) {
+      // Ir a login y luego redirigir a la ruta solicitada
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LoginScreen(
+            redirectRoute: route,
+            requiredPermission: requiredPermission,
+            requiredRoles: requiredRoles,
+            roleName: roleName,
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Ya autenticado — verificar permisos
+    if (requiredPermission != null && !auth.hasPermission(requiredPermission)) {
+      _showPermissionError(context, roleName);
+      return;
+    }
+
+    if (requiredRoles != null && !auth.hasRole(requiredRoles)) {
+      _showPermissionError(context, roleName);
+      return;
+    }
+
+    // Actualizar userId en PosProvider
+    final posProvider = Provider.of<PosProvider>(context, listen: false);
+    posProvider.setUserId(auth.user!.id);
+
+    Navigator.pushNamed(context, route);
+  }
+
+  void _showPermissionError(BuildContext context, String roleName) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Tu rol no tiene acceso a $roleName'),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
       ),
     );
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/restaurant_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/cart_model.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -14,19 +16,30 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkRestaurantSelection();
+      _initializeApp();
     });
   }
 
-  Future<void> _checkRestaurantSelection() async {
-    final provider = Provider.of<RestaurantProvider>(context, listen: false);
-    await provider.initialize();
+  Future<void> _initializeApp() async {
+    final restaurantProvider =
+        Provider.of<RestaurantProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    // Inicializar en paralelo restaurante y sesión de auth
+    await Future.wait([
+      restaurantProvider.initialize(),
+      authProvider.restoreSession(),
+    ]);
 
     // Esperar un momento para mostrar el splash
     await Future.delayed(const Duration(seconds: 2));
 
     if (mounted) {
-      if (provider.hasSelection) {
+      if (restaurantProvider.hasSelection) {
+        // Configurar el restaurantId en el cart para promociones
+        final cart = Provider.of<CartModel>(context, listen: false);
+        cart.setRestaurantId(restaurantProvider.currentRestaurantId!);
+
         // Ya tiene restaurante seleccionado, ir al home
         Navigator.pushReplacementNamed(context, '/home');
       } else {
@@ -38,8 +51,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final brandColor = Provider.of<RestaurantProvider>(context).primaryColor;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF3d5a80),
+      backgroundColor: brandColor,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -59,10 +74,10 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                 ],
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.restaurant,
                 size: 80,
-                color: Color(0xFF3d5a80),
+                color: brandColor,
               ),
             ),
             const SizedBox(height: 32),

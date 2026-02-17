@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/restaurant_provider.dart';
+import '../../providers/cart_model.dart';
 
 class RestaurantSelectionScreen extends StatefulWidget {
   final int tenantId;
@@ -32,8 +33,10 @@ class _RestaurantSelectionScreenState
 
   @override
   Widget build(BuildContext context) {
+    final brandColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF3d5a80),
+      backgroundColor: brandColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -50,10 +53,10 @@ class _RestaurantSelectionScreenState
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.restaurant,
                       size: 60,
-                      color: Color(0xFF3d5a80),
+                      color: brandColor,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -90,9 +93,9 @@ class _RestaurantSelectionScreenState
                 child: Consumer<RestaurantProvider>(
                   builder: (ctx, provider, child) {
                     if (provider.isLoading) {
-                      return const Center(
+                      return Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFF3d5a80),
+                          color: brandColor,
                         ),
                       );
                     }
@@ -130,7 +133,7 @@ class _RestaurantSelectionScreenState
                               icon: const Icon(Icons.refresh),
                               label: const Text('Reintentar'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF3d5a80),
+                                backgroundColor: brandColor,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 24,
@@ -201,6 +204,11 @@ class _RestaurantSelectionScreenState
                                   ),
                                 );
                               } else {
+                                // Configurar restaurantId en el cart para promociones
+                                if (context.mounted) {
+                                  final cart = Provider.of<CartModel>(context, listen: false);
+                                  cart.setRestaurantId(restaurant.id);
+                                }
                                 debugPrint('Navigating to home...');
                                 navigator.pushReplacementNamed('/home');
                               }
@@ -214,14 +222,14 @@ class _RestaurantSelectionScreenState
                                     width: 60,
                                     height: 60,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF3d5a80)
+                                      color: brandColor
                                           .withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.restaurant,
                                       size: 32,
-                                      color: Color(0xFF3d5a80),
+                                      color: brandColor,
                                     ),
                                   ),
                                   const SizedBox(width: 16),
