@@ -1,23 +1,36 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/auth_user.dart';
 import '../service/api_service.dart';
 
 /// Provider de autenticación.
-/// Gestiona login/logout, persistencia de sesión y verificación de permisos.
+/// Gestiona login/logout, persistencia segura (FlutterSecureStorage)
+/// y verificación de permisos.
 class AuthProvider with ChangeNotifier {
+  // ── Almacenamiento seguro ──────────────────────────────────────────────────
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+  static const _kToken = 'auth_token';
+  static const _kRole  = 'auth_role';
+  static const _kUser  = 'auth_user';
+
+  // ── Estado interno ─────────────────────────────────────────────────────────
   AuthUser? _user;
-  String? _token;
-  bool _isLoading = false;
-  String? _error;
+  String?   _token;
+  bool      _isLoading     = false;
+  bool      _isInitialized = false;
+  String?   _error;
 
   // ── Getters ────────────────────────────────────────────────
 
-  AuthUser? get user => _user;
-  String? get token => _token;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
+  AuthUser? get user          => _user;
+  String?   get token         => _token;
+  bool      get isLoading     => _isLoading;
+  bool      get isInitialized => _isInitialized;
+  String?   get error         => _error;
 
   bool get isAuthenticated => _user != null && _token != null;
   String get userName => _user?.name ?? '';
@@ -59,11 +72,13 @@ class AuthProvider with ChangeNotifier {
   // ── Login ─────────────────────────────────────────────────
 
   /// Login con PIN del usuario.
-  /// Llama a /api/auth/login-pin y guarda token + usuario en SharedPreferences.
-  Future<bool> loginWithPin({
-    required String pin,
-    required int restaurantId,
-  }) async {
+  ///
+  /// Guarda el [token] y el [roleName] en [FlutterSecureStorage]
+  /// y llama [notifyListeners] al finalizar para que main.dart
+  /// redirija según el rol con un switch.
+  ///
+  /// Retorna `true` si el login fue exitoso.
+  Future<bool> login(String pin, int restaurantId) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -75,32 +90,36 @@ class AuthProvider with ChangeNotifier {
       );
 
       if (response['success'] == true) {
-        _token = response['token'];
-        _user = AuthUser.fromJson(response['user']);
+        _token = response['token'] as String;
+        _user  = AuthUser.fromJson(response['user'] as Map<String, dynamic>);
 
         // Actualizar token global en ApiService
         ApiService.setAuthToken(_token!);
 
-        // Persistir sesión
+        // Persistir token y role en SecureStorage
         await _saveSession();
 
         _isLoading = false;
-        _error = null;
-        notifyListeners();
+        _error     = null;
+        notifyListeners(); // main.dart escucha → redirige según el rol
         return true;
-      } else {
-        _error = response['message'] ?? 'Error de autenticación';
-        _isLoading = false;
-        notifyListeners();
-        return false;
       }
+
+      _error     = (response['message'] as String?) ?? 'Error de autenticación';
+      _isLoading = false;
+      notifyListeners();
+      return false;
     } catch (e) {
-      _error = e.toString().replaceFirst('Exception: ', '');
+      _error     = e.toString().replaceFirst('Exception: ', '');
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
+
+  /// Alias con parámetros nombrados para compatibilidad con código existente.
+  Future<bool> loginWithPin({required String pin, required int restaurantId}) =>
+      login(pin, restaurantId);
 
   // ── Logout ────────────────────────────────────────────────
 
@@ -125,62 +144,74 @@ class AuthProvider with ChangeNotifier {
 
   // ── Restaurar sesión ──────────────────────────────────────
 
-  /// Intentar restaurar sesión guardada en SharedPreferences.
-  /// Retorna true si había sesión válida.
+  /// Intenta restaurar la sesión guardada en [FlutterSecureStorage].
+  ///
+  /// Establece [isInitialized] = `true` al terminar (con o sin sesión).
+  /// Retorna `true` si había sesión válida.
   Future<bool> restoreSession() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('auth_user');
-      final savedToken = prefs.getString('auth_token');
+      final savedToken = await _storage.read(key: _kToken);
+      final userJson   = await _storage.read(key: _kUser);
 
-      if (userJson != null && savedToken != null) {
-        _user = AuthUser.fromJson(jsonDecode(userJson));
+      if (savedToken != null && userJson != null) {
+        _user  = AuthUser.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
         _token = savedToken;
         ApiService.setAuthToken(_token!);
 
-        // Validar que el token siga siendo válido
+        // Validar que el token siga siendo válido en el servidor
         try {
           final meResponse = await ApiService.getMe();
           if (meResponse['success'] == true) {
-            _user = AuthUser.fromJson(meResponse['user']);
+            _user = AuthUser.fromJson(
+                meResponse['user'] as Map<String, dynamic>);
             await _saveSession(); // Actualizar datos locales
+            _isInitialized = true;
             notifyListeners();
             return true;
           }
         } catch (_) {
-          // Token expirado o inválido
+          // Token expirado o sin conexión
         }
 
-        // Si llegamos aquí, el token ya no es válido
+        // Token inválido — limpiar
         await _clearSession();
-        _user = null;
+        _user  = null;
         _token = null;
         ApiService.setAuthToken('');
-        notifyListeners();
-        return false;
       }
     } catch (_) {
-      // Error al leer SharedPreferences
+      // Error de lectura
     }
 
+    _isInitialized = true;
+    notifyListeners();
     return false;
   }
 
-  // ── Persistencia interna ──────────────────────────────────
+  // ── Persistencia interna ──────────────────────────────────────────────────
 
+  /// Guarda token, role (nombre) y datos completos del usuario en SecureStorage.
   Future<void> _saveSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_user != null) {
-      await prefs.setString('auth_user', jsonEncode(_user!.toJson()));
-    }
+    final futures = <Future>[];
     if (_token != null) {
-      await prefs.setString('auth_token', _token!);
+      futures.add(_storage.write(key: _kToken, value: _token!));
     }
+    if (_user != null) {
+      futures.add(
+        _storage.write(key: _kUser, value: jsonEncode(_user!.toJson())),
+      );
+      // Guarda el nombre del rol explícitamente para lecturas rápidas
+      futures.add(_storage.write(key: _kRole, value: _user!.role.name));
+    }
+    await Future.wait(futures);
   }
 
+  /// Elimina token, role y usuario de SecureStorage.
   Future<void> _clearSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_user');
-    await prefs.remove('auth_token');
+    await Future.wait([
+      _storage.delete(key: _kToken),
+      _storage.delete(key: _kRole),
+      _storage.delete(key: _kUser),
+    ]);
   }
 }

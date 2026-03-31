@@ -5,6 +5,7 @@ import 'package:restaurant_kiosco/models/kitchen_order.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
 import 'package:restaurant_kiosco/providers/pos_provider.dart';
+import 'package:restaurant_kiosco/providers/auth_provider.dart';
 import '../cash_register_screen.dart';
 import '../order_search_screen.dart';
 import '../split_payment_screen.dart';
@@ -65,8 +66,9 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
   Future<void> _loadCurrentCashRegister() async {
     try {
       final restaurantId = await ConfigurationService.getRestaurantId();
+      final pos = context.read<PosProvider>();
       final response = await ApiService.getCurrentCashRegister(
-        userId: 1, // TODO: obtener del contexto de autenticación
+        userId: pos.userId,
         restaurantId: restaurantId,
       );
       if (mounted && response['cash_register'] != null) {
@@ -159,9 +161,12 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Pago registrado! Mesa liberada.'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: const Text('¡Pago registrado! Mesa liberada.',
+                style: TextStyle(fontFamily: 'Inter')),
+            backgroundColor: const Color(0xFF2E7D32),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
         _loadOrders(); // Recargar inmediatamente
@@ -177,8 +182,8 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
 
   Future<void> _cancelOrder(int orderId) async {
     try {
-      // Implementar endpoint de cancelar o usar updateStatus('cancelled')
-      await ApiService.updateOrderStatus(orderId: orderId, status: 'cancelled');
+      // Usar el endpoint DELETE /api/orders/{id} que sí permite cajeros
+      await ApiService.cancelOrder(orderId);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -195,174 +200,270 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
     }
   }
 
+  // ── Constantes de diseño ──────────────────────────────────
+  static const _kBg    = Color(0xFFF5F5F5);
+  static const _kPink  = Color(0xFFE91E63);
+  static const _kDark  = Color(0xFF212121);
+  static const _kSub   = Color(0xFF757575);
+
   @override
   Widget build(BuildContext context) {
-    // Contar órdenes antiguas
     final oldOrdersCount = orders.where(_isOldOrder).length;
-    
+    final activeCount = tableOrders.length;
+    final kioskCount  = kioskOrders.length;
+
     final posProvider = Provider.of<PosProvider>(context, listen: false);
     final userName = posProvider.currentCashRegister?.user?.name ?? 'Usuario';
-    final userRole = 'Cajero'; // TODO: Obtener del rol real del usuario
-    
+
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Text(
-              _formatCurrentTime(),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(width: 16),
-            const Text('Caja - Pagos Pendientes'),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.person, size: 18),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$userRole - $userName',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.blue.shade800,
-        foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: [
-            Tab(
-              icon: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.table_restaurant),
-                  const SizedBox(width: 8),
-                  Text('Mesas (${tableOrders.length})'),
-                ],
-              ),
-            ),
-            Tab(
-              icon: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.store),
-                  const SizedBox(width: 8),
-                  Text('Kiosko (${kioskOrders.length})'),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.account_balance_wallet),
-            tooltip: 'Gestión de Caja',
-            onPressed: () => _navigateToCashRegister(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Buscar Órdenes',
-            onPressed: () => _navigateToOrderSearch(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() => isLoading = true);
-              _loadOrders();
-            },
-          ),
-        ],
-      ),
+      backgroundColor: _kBg,
       body: Column(
         children: [
-          // Banner de advertencia y filtro de órdenes antiguas
-          if (oldOrdersCount > 0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                border: Border(bottom: BorderSide(color: Colors.orange.shade200)),
-              ),
+          // ── Header blanco ──
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 14),
+            child: SafeArea(
+              bottom: false,
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 24),
+                  // Reloj
+                  Text(
+                    _formatCurrentTime(),
+                    style: const TextStyle(
+                      color: _kDark,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hay $oldOrdersCount ${oldOrdersCount == 1 ? 'orden' : 'órdenes'} fuera del turno actual',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange.shade900,
-                          ),
+                  const Text(
+                    'Caja',
+                    style: TextStyle(
+                      color: _kSub,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w400,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                  const Spacer(),
+                  // ── SegmentedButton tabs ──
+                  SegmentedButton<String>(
+                    segments: [
+                      ButtonSegment(
+                        value: 'mesas',
+                        label: Text(
+                          activeCount > 0 ? 'Mesas ($activeCount)' : 'Mesas',
+                          style: const TextStyle(fontFamily: 'Inter'),
                         ),
-                        Text(
-                          'Creadas antes de abrir la caja',
-                          style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+                        icon: const Icon(Icons.table_restaurant_outlined, size: 18),
+                      ),
+                      ButtonSegment(
+                        value: 'kiosko',
+                        label: Text(
+                          kioskCount > 0 ? 'Kiosko ($kioskCount)' : 'Kiosko',
+                          style: const TextStyle(fontFamily: 'Inter'),
+                        ),
+                        icon: const Icon(Icons.storefront_outlined, size: 18),
+                      ),
+                    ],
+                    selected: {_tabController.index == 0 ? 'mesas' : 'kiosko'},
+                    onSelectionChanged: (sel) {
+                      setState(() {
+                        _tabController.index = sel.first == 'mesas' ? 0 : 1;
+                      });
+                    },
+                    showSelectedIcon: false,
+                    style: ButtonStyle(
+                      backgroundColor: WidgetStateProperty.resolveWith((s) {
+                        return s.contains(WidgetState.selected)
+                            ? _kDark
+                            : Colors.grey.shade100;
+                      }),
+                      foregroundColor: WidgetStateProperty.resolveWith((s) {
+                        return s.contains(WidgetState.selected)
+                            ? Colors.white
+                            : _kSub;
+                      }),
+                      shape: WidgetStateProperty.all(
+                        RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24)),
+                      ),
+                      side: WidgetStateProperty.all(BorderSide.none),
+                      textStyle: WidgetStateProperty.all(const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        fontFamily: 'Inter',
+                      )),
+                    ),
+                  ),
+                  const Spacer(),
+                  // ── Acciones rápidas ──
+                  _headerAction(Icons.account_balance_wallet_outlined, 'Caja',
+                      () => _navigateToCashRegister(context)),
+                  const SizedBox(width: 6),
+                  _headerAction(Icons.search_rounded, 'Buscar',
+                      () => _navigateToOrderSearch(context)),
+                  const SizedBox(width: 6),
+                  _headerAction(Icons.refresh_rounded, 'Sync', () {
+                    setState(() => isLoading = true);
+                    _loadOrders();
+                  }),
+                  const SizedBox(width: 16),
+                  // ── Avatar + menú ──
+                  PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      if (value == 'logout') {
+                        final auth = context.read<AuthProvider>();
+                        await auth.logout();
+                        if (mounted) {
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                              '/login', (route) => false);
+                        }
+                      }
+                    },
+                    offset: const Offset(0, 50),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        enabled: false,
+                        child: Text(userName,
+                            style: TextStyle(
+                                color: _kSub, fontWeight: FontWeight.w600)),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'logout',
+                        child: Row(children: [
+                          Icon(Icons.logout_rounded, size: 20, color: _kPink),
+                          SizedBox(width: 12),
+                          Text('Salir'),
+                        ]),
+                      ),
+                    ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(userName,
+                            style: TextStyle(
+                                color: _kSub,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Inter')),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: _kPink,
+                          child: Text(
+                            userName.isNotEmpty
+                                ? userName[0].toUpperCase()
+                                : 'U',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _showOldOrders ? 'Ocultar' : 'Mostrar',
-                        style: TextStyle(fontSize: 13, color: Colors.orange.shade900),
-                      ),
-                      Switch(
-                        value: _showOldOrders,
-                        activeColor: Colors.orange.shade700,
-                        onChanged: (value) {
-                          setState(() => _showOldOrders = value);
-                        },
-                      ),
-                    ],
+                ],
+              ),
+            ),
+          ),
+
+          // ── Banner órdenes antiguas ──
+          if (oldOrdersCount > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              color: const Color(0xFFFFF3E0),
+              child: Row(
+                children: [
+                  Icon(Icons.history_rounded,
+                      color: Colors.orange.shade700, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '$oldOrdersCount ${oldOrdersCount == 1 ? 'orden' : 'órdenes'} fuera del turno',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange.shade800,
+                          fontFamily: 'Inter'),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _showOldOrders = !_showOldOrders),
+                    child: Text(
+                      _showOldOrders ? 'Ocultar' : 'Mostrar',
+                      style: TextStyle(
+                          color: Colors.orange.shade800,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          fontFamily: 'Inter'),
+                    ),
                   ),
                 ],
               ),
             ),
-          
-          // Contenido con tabs
+
+          // ── Body ──
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: _kPink))
                 : error != null
-                    ? Center(child: Text('Error: $error'))
+                    ? Center(
+                        child: Text('Error: $error',
+                            style: const TextStyle(color: _kSub)))
                     : TabBarView(
                         controller: _tabController,
                         children: [
-                          // Tab 1: Órdenes de Mesa
                           _buildOrdersList(
                             orders: tableOrders,
-                            emptyIcon: Icons.table_restaurant,
-                            emptyMessage: 'No hay órdenes de mesa pendientes',
+                            emptyIcon: Icons.table_restaurant_outlined,
+                            emptyMessage:
+                                'No hay órdenes de mesa pendientes',
                           ),
-                          // Tab 2: Órdenes de Kiosko
                           _buildOrdersList(
                             orders: kioskOrders,
-                            emptyIcon: Icons.store,
-                            emptyMessage: 'No hay órdenes de kiosko pendientes',
+                            emptyIcon: Icons.storefront_outlined,
+                            emptyMessage:
+                                'No hay órdenes de kiosko pendientes',
                           ),
                         ],
                       ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _headerAction(IconData icon, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 20, color: _kSub),
+        ),
       ),
     );
   }
@@ -377,11 +478,12 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(emptyIcon, size: 80, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
+            Icon(emptyIcon, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 12),
             Text(
               emptyMessage,
-              style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+              style: const TextStyle(
+                  fontSize: 16, color: _kSub, fontFamily: 'Inter'),
             ),
           ],
         ),
@@ -389,7 +491,7 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       itemCount: orders.length,
       itemBuilder: (context, index) {
         return _CashierOrderCard(
@@ -414,11 +516,24 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 32),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3E0),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.history_rounded,
+                  color: Colors.orange.shade700, size: 22),
+            ),
             const SizedBox(width: 12),
-            const Expanded(child: Text('⚠️ Orden Fuera de Turno')),
+            const Expanded(
+              child: Text('Orden Fuera de Turno',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700, fontFamily: 'Inter')),
+            ),
           ],
         ),
         content: Column(
@@ -427,52 +542,62 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
           children: [
             Text(
               'Esta orden fue creada hace ${daysAgo > 0 ? '$daysAgo día(s)' : '$hoursAgo hora(s)'}, ANTES de abrir la caja actual.',
-              style: const TextStyle(fontSize: 16),
+              style: const TextStyle(fontSize: 14, fontFamily: 'Inter'),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade200),
+                color: const Color(0xFFFFF3E0),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Orden #${order.orderNumber}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontFamily: 'Inter'),
                   ),
-                  Text('Total: \$${order.total.toStringAsFixed(2)}'),
-                  Text('Creada: ${_formatFullDate(order.createdAt)}'),
+                  Text('Total: \$${order.total.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontFamily: 'Inter')),
+                  Text('Creada: ${_formatFullDate(order.createdAt)}',
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF757575), fontFamily: 'Inter')),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             const Text(
-              '⚠️ El pago se registrará en el turno actual, pero la orden es de un turno anterior.',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '¿Deseas continuar con el pago?',
-              style: TextStyle(fontSize: 14),
+              'El pago se registrará en el turno actual.',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF757575),
+                  fontFamily: 'Inter'),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('CANCELAR'),
+            child: const Text('Cancelar',
+                style: TextStyle(
+                    color: Color(0xFF757575), fontFamily: 'Inter')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange.shade700,
+              backgroundColor: const Color(0xFFE91E63),
               foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('CONFIRMAR PAGO'),
+            child: const Text('Confirmar Pago',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700, fontFamily: 'Inter')),
           ),
         ],
       ),
@@ -487,8 +612,9 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
 
   Future<void> _navigateToCashRegister(BuildContext context) async {
     final restaurantId = await ConfigurationService.getRestaurantId();
-    final userId = 1; // TODO: Obtener del contexto de autenticación
-    final tenantId = 1; // TODO: Obtener del contexto de autenticación
+    final pos = context.read<PosProvider>();
+    final userId = pos.userId;
+    final tenantId = pos.tenantId;
     
     if (mounted) {
       Navigator.push(
@@ -532,7 +658,7 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
         builder: (context, scrollController) => SplitPaymentScreen(
           orderId: order.id,
           orderTotal: order.total,
-          cashRegisterId: 1, // TODO: Obtener de la caja actual
+          cashRegisterId: context.read<PosProvider>().currentCashRegister?.id ?? 0,
           onPaymentComplete: () {
             _loadOrders();
           },
@@ -546,7 +672,7 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
       context: context,
       orderId: order.id,
       orderTotal: order.total,
-      appliedBy: 1, // TODO: Obtener del usuario actual
+      appliedBy: context.read<PosProvider>().userId,
       onApplied: () {
         _loadOrders();
       },
@@ -560,7 +686,7 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
         builder: (context) => RefundScreen(
           orderId: order.id,
           orderTotal: order.total,
-          processedBy: 1, // TODO: Obtener del usuario actual
+          processedBy: context.read<PosProvider>().userId,
         ),
       ),
     ).then((success) {
@@ -587,6 +713,10 @@ class _CashierOrderCard extends StatelessWidget {
   final Function(KitchenOrder) onDiscount;
   final Function(KitchenOrder) onRefund;
 
+  static const _kPink = Color(0xFFE91E63);
+  static const _kDark = Color(0xFF212121);
+  static const _kSub  = Color(0xFF757575);
+
   const _CashierOrderCard({
     required this.order,
     required this.isOldOrder,
@@ -599,334 +729,304 @@ class _CashierOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determinar el color del borde y cabecera según el origen
-    final bool isTableOrder = order.tableNumber != null;
-    // Si es orden antigua, usar color rojo de advertencia
-    final Color borderColor = isOldOrder 
-        ? Colors.red.shade600 
-        : (isTableOrder ? Colors.blue.shade600 : Colors.orange.shade600);
-    final Color headerColor = isOldOrder
-        ? Colors.red.shade50
-        : (isTableOrder ? Colors.blue.shade50 : Colors.orange.shade50);
-    
-    return Card(
-      elevation: 4,
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: borderColor, width: 2),
+    final bool isTable = order.tableNumber != null;
+    final Color accent = isOldOrder
+        ? Colors.red.shade500
+        : (isTable ? const Color(0xFF1976D2) : Colors.orange.shade600);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border(
+          left: BorderSide(color: accent, width: 5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Column(
-        children: [
-          // Header con color distintivo
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: headerColor,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(10),
-                topRight: Radius.circular(10),
-              ),
-            ),
-            child: Row(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Row superior: info + total ──
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  isOldOrder ? Icons.warning_amber : (isTableOrder ? Icons.table_restaurant : Icons.store),
-                  color: borderColor,
-                  size: 28,
+                // Icono en caja tenue
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(
+                    isOldOrder
+                        ? Icons.history_rounded
+                        : (isTable
+                            ? Icons.table_restaurant_outlined
+                            : Icons.storefront_outlined),
+                    size: 22,
+                    color: accent,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
+                // Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (isOldOrder)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade700,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text(
-                            '⚠️ ORDEN ANTIGUA',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      Text(
-                        isTableOrder ? 'ORDEN DE MESA' : 'ORDEN KIOSKO',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: borderColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '\$${order.total.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green.shade700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Contenido principal
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Información de la orden
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
                         children: [
                           Text(
-                            'Orden #${order.orderNumber}',
+                            '#${order.orderNumber}',
                             style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: _kDark,
+                              fontFamily: 'Inter',
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          if (order.tableNumber != null)
+                          if (isOldOrder) ...[
+                            const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.blue.shade600,
-                                borderRadius: BorderRadius.circular(16),
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'FUERA DE TURNO',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.red.shade600,
+                                  fontFamily: 'Inter',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (order.tableNumber != null) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE3F2FD),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 'Mesa ${order.tableNumber}',
                                 style: const TextStyle(
-                                  fontSize: 13, 
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1565C0),
+                                  fontFamily: 'Inter',
                                 ),
                               ),
                             ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              _buildStatusBadge(order.status),
-                              const SizedBox(width: 8),
-                              Text(
-                                _formatTime(order.createdAt),
-                                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                              ),
-                            ],
+                            const SizedBox(width: 8),
+                          ],
+                          _buildStatusBadge(order.status),
+                          const SizedBox(width: 8),
+                          Text(
+                            _formatTime(order.createdAt),
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: _kSub,
+                                fontFamily: 'Inter'),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const Divider(height: 20),
-            // Lista resumida de items
+                // Total
+                Text(
+                  '\$${order.total.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    color: _kDark,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 14),
+            Divider(height: 1, color: Colors.grey.shade200),
+            const SizedBox(height: 12),
+
+            // ── Items ──
             ...order.items.map((item) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(7),
                         ),
                         child: Text(
                           '${item.quantity}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              fontFamily: 'Inter'),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           item.productName,
-                          style: const TextStyle(fontSize: 16),
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: _kDark,
+                              fontFamily: 'Inter'),
                         ),
                       ),
                       Text(
                         '\$${(item.unitPrice * item.quantity).toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: _kDark,
+                            fontFamily: 'Inter'),
                       ),
                     ],
                   ),
                 )),
-            const SizedBox(height: 16),
-            // Opciones adicionales
+
+            const SizedBox(height: 14),
+
+            // ── Acciones secundarias (botones pastel) ──
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                _buildActionChip(
+                _pastelBtn(
                   label: 'Descuento',
-                  icon: Icons.percent,
-                  color: Colors.orange,
+                  icon: Icons.percent_rounded,
+                  bg: const Color(0xFFFFF3E0),
+                  fg: Colors.orange.shade800,
                   onTap: () => onDiscount(order),
                 ),
-                _buildActionChip(
+                _pastelBtn(
                   label: 'Devolución',
-                  icon: Icons.undo,
-                  color: Colors.red,
+                  icon: Icons.undo_rounded,
+                  bg: const Color(0xFFFFEBEE),
+                  fg: Colors.red.shade700,
                   onTap: () => onRefund(order),
                 ),
-                _buildActionChip(
+                _pastelBtn(
                   label: 'Pagos Múltiples',
-                  icon: Icons.payment,
-                  color: Colors.purple,
+                  icon: Icons.call_split_rounded,
+                  bg: const Color(0xFFF3E5F5),
+                  fg: Colors.purple.shade700,
                   onTap: () => onPaymentOptions(order),
                 ),
               ],
             ),
+
             const SizedBox(height: 16),
+
+            // ── Botones principales ──
             Row(
               children: [
+                // Cancelar — pastel
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: OutlinedButton(
                     onPressed: () => _showCancelDialog(context),
-                    icon: const Icon(Icons.cancel, color: Colors.red),
-                    label: const Text('Cancelar', style: TextStyle(color: Colors.red)),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: const BorderSide(color: Colors.red),
+                      foregroundColor: Colors.red.shade600,
+                      side: BorderSide(color: Colors.red.shade200),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      backgroundColor: const Color(0xFFFFF5F5),
                     ),
+                    child: const Text('Cancelar',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Inter')),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 14),
+                // Cobrar — Rosa Mexicano llamativo
                 Expanded(
                   flex: 2,
                   child: ElevatedButton.icon(
                     onPressed: () => onConfirm(order.id),
-                    icon: const Icon(Icons.check_circle),
-                    label: const Text('COBRAR EFECTIVO'),
+                    icon: const Icon(Icons.payments_outlined, size: 20),
+                    label: const Text('COBRAR',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                            fontFamily: 'Inter')),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: _kPink,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
                     ),
                   ),
                 ),
               ],
             ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildStatusBadge(String status) {
-    Color color;
-    String label;
-    IconData icon;
-
-    switch (status) {
-      case 'pending':
-        color = Colors.orange;
-        label = 'Pendiente';
-        icon = Icons.schedule;
-        break;
-      case 'confirmed':
-        color = Colors.blue;
-        label = 'Confirmada';
-        icon = Icons.check_circle_outline;
-        break;
-      case 'preparing':
-        color = Colors.purple;
-        label = 'Preparando';
-        icon = Icons.restaurant;
-        break;
-      case 'ready':
-        color = Colors.green;
-        label = 'Lista';
-        icon = Icons.done_all;
-        break;
-      default:
-        color = Colors.grey;
-        label = status;
-        icon = Icons.info_outline;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'Hace un momento';
-    } else if (difference.inMinutes < 60) {
-      return 'Hace ${difference.inMinutes} min';
-    } else if (difference.inHours < 24) {
-      return 'Hace ${difference.inHours}h ${difference.inMinutes % 60}min';
-    } else {
-      return '${dateTime.day}/${dateTime.month} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
-    }
-  }
-
-  Widget _buildActionChip({
+  Widget _pastelBtn({
     required String label,
     required IconData icon,
-    required Color color,
+    required Color bg,
+    required Color fg,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.5)),
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18, color: color),
+            Icon(icon, size: 16, color: fg),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: fg,
+                fontFamily: 'Inter',
               ),
             ),
           ],
@@ -935,23 +1035,95 @@ class _CashierOrderCard extends StatelessWidget {
     );
   }
 
+  Widget _buildStatusBadge(String status) {
+    Color bg;
+    Color fg;
+    String label;
+
+    switch (status) {
+      case 'pending':
+        bg = const Color(0xFFFFF3E0);
+        fg = Colors.orange.shade800;
+        label = 'Pendiente';
+        break;
+      case 'confirmed':
+        bg = const Color(0xFFE3F2FD);
+        fg = const Color(0xFF1565C0);
+        label = 'Confirmada';
+        break;
+      case 'preparing':
+        bg = const Color(0xFFF3E5F5);
+        fg = Colors.purple.shade700;
+        label = 'Preparando';
+        break;
+      case 'ready':
+        bg = const Color(0xFFE8F5E9);
+        fg = const Color(0xFF2E7D32);
+        label = 'Lista';
+        break;
+      default:
+        bg = Colors.grey.shade100;
+        fg = _kSub;
+        label = status;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: fg,
+          fontFamily: 'Inter',
+        ),
+      ),
+    );
+  }
+
+  String _formatTime(DateTime dateTime) {
+    final diff = DateTime.now().difference(dateTime);
+    if (diff.inMinutes < 1) return 'Ahora';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h ${diff.inMinutes % 60}m';
+    return '${dateTime.day}/${dateTime.month} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
   void _showCancelDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cancelar Orden'),
-        content: const Text('¿Estás seguro de que deseas cancelar esta orden? Esta acción no se puede deshacer.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Cancelar Orden',
+            style: TextStyle(fontWeight: FontWeight.w700, fontFamily: 'Inter')),
+        content: const Text(
+            '¿Estás seguro de que deseas cancelar esta orden? Esta acción no se puede deshacer.',
+            style: TextStyle(fontFamily: 'Inter')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Volver'),
+            child: Text('Volver',
+                style: TextStyle(color: _kSub, fontFamily: 'Inter')),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
               onCancel(order.id);
             },
-            child: const Text('Sí, Cancelar', style: TextStyle(color: Colors.red)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFEBEE),
+              foregroundColor: Colors.red.shade700,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Sí, Cancelar',
+                style:
+                    TextStyle(fontWeight: FontWeight.w700, fontFamily: 'Inter')),
           ),
         ],
       ),

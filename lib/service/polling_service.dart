@@ -2,13 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../constants.dart'; // O donde tengas tu 'baseUrl'
+import '../constants.dart';
+import 'api_service.dart';
 
 class PollingService {
   Timer? _timer;
+  int _restaurantId = 1;
   
   // Notificador: La UI escuchará esta lista para redibujarse
   static final ValueNotifier<List<dynamic>> pendingOrders = ValueNotifier([]);
+
+  /// Configurar el restaurante para el polling.
+  void setRestaurantId(int id) {
+    _restaurantId = id;
+  }
 
   // Iniciar el ciclo (Polling)
   void startPolling() {
@@ -31,33 +38,34 @@ class PollingService {
 
   Future<void> _fetchOrders() async {
     try {
-      // URL sin query params - el shop_id va en el header
-      final url = Uri.parse('$baseUrl/kds/orders/pending');
-      debugPrint("📡 Consultando KDS: $url");
+      // Usar la misma ruta que el backend: /kitchen/orders
+      final url = Uri.parse('$baseUrl/kitchen/orders?restaurant_id=$_restaurantId');
+      debugPrint("📡 Consultando Kitchen: $url");
       
       final response = await http.get(
         url,
-        headers: {
-          'Accept': 'application/json',
-          'X-Shop-ID': '1',  // ID de la tienda
-        },
+        headers: ApiService.headers,
       );
 
       if (response.statusCode == 200) {
         final dynamic decoded = jsonDecode(response.body);
         List<dynamic> orders = [];
 
-        // Manejo de formatos de Laravel (Lista pura vs { data: [] })
-        if (decoded is List) {
+        // Manejo de formatos de Laravel
+        if (decoded is Map && decoded.containsKey('data')) {
+          final data = decoded['data'];
+          if (data is Map && data.containsKey('orders')) {
+            orders = data['orders'] as List? ?? [];
+          } else if (data is List) {
+            orders = data;
+          }
+        } else if (decoded is List) {
           orders = decoded;
-        } else if (decoded is Map && decoded.containsKey('data')) {
-          orders = decoded['data'];
         }
 
         // Actualizamos la UI
         pendingOrders.value = orders;
         
-        // (Opcional) Log para ver si llegan
         if (orders.isNotEmpty) {
            debugPrint("📦 Órdenes recuperadas: ${orders.length}");
         }
@@ -69,26 +77,24 @@ class PollingService {
       debugPrint("❌ Error conexión Polling: $e");
     }
   }
+
   // Método para completar orden
   Future<bool> markOrderAsCompleted(int orderId) async {
     try {
-      // Url de tu ruta PATCH
-      final url = Uri.parse('$baseUrl/kds/orders/$orderId/status');
+      // Usar la ruta correcta: /kitchen/orders/{id}/status
+      final url = Uri.parse('$baseUrl/kitchen/orders/$orderId/status');
       
       final response = await http.patch(
         url,
         headers: {
           "Content-Type": "application/json",
           'Accept': 'application/json',
-          'X-Shop-ID': '1',  // ID de la tienda
+          ...ApiService.headers,
         },
-        body: jsonEncode({"status": "completed"}), // O el estado que uses en tu DB
+        body: jsonEncode({"status": "ready"}),
       );
 
       if (response.statusCode == 200) {
-        // ✨ TRUCO DE UX:
-        // Borramos la orden de la lista LOCALMENTE de inmediato
-        // para que el cocinero sienta que la app es instantánea.
         List<dynamic> currentOrders = List.from(pendingOrders.value);
         currentOrders.removeWhere((order) => order['id'] == orderId);
         pendingOrders.value = currentOrders;

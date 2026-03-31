@@ -15,11 +15,11 @@ class RestaurantTable {
 
   factory RestaurantTable.fromJson(Map<String, dynamic> json) {
     return RestaurantTable(
-      id: json['id'],
-      name: json['name'],
-      section: json['section'],
+      id: json['id'] ?? 0,
+      name: json['name']?.toString() ?? '',
+      section: json['section']?.toString(),
       capacity: json['capacity'] ?? 4,
-      status: json['status'] ?? 'available',
+      status: json['status']?.toString() ?? 'available',
     );
   }
 }

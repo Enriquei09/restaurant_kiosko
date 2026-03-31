@@ -4,7 +4,16 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/pos_provider.dart';
 import '../../../providers/restaurant_provider.dart';
 
-/// Pantalla de login con PIN numérico.
+// ─── Constantes de diseño ────────────────────────────────────────────────────
+const _kBg            = Color(0xFFF8F9FA);
+const _kPinActive     = Color(0xFFE91E63); // Rosa Mexicano
+const _kPinError      = Color(0xFFEF4444);
+const _kNumText       = Color(0xFF374151); // Gris oscuro
+const _kSubtitle      = Color(0xFF6B7280);
+const _kKeyBg         = Colors.white;
+const int _pinLength  = 4;
+
+/// Pantalla de login con PIN numérico — diseño premium.
 /// Recibe opcionalmente la ruta a la que redirigir después del login.
 class LoginScreen extends StatefulWidget {
   final String? redirectRoute;
@@ -24,317 +33,268 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  String _pin = '';
-  bool _isLoading = false;
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin {
+  String  _pin       = '';
+  bool    _isLoading = false;
   String? _error;
+  bool    _shaking   = false;
 
-  static const int _pinLength = 4;
+  // Shake animation
+  late final AnimationController _shakeCtrl;
+  late final Animation<double>   _shakeAnim;
 
-  Color get _primaryColor =>
-      Theme.of(context).colorScheme.primary;
+  @override
+  void initState() {
+    super.initState();
+    _shakeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    // Oscilación: 0 → 1 → -1 → 1 → -1 → 0  (vibración)
+    _shakeAnim = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0, end: 10), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 10, end: -10), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -10, end: 8), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 8, end: -8), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -8, end: 4), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 4, end: 0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _shakeCtrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _shakeCtrl.dispose();
+    super.dispose();
+  }
+
+  // ── Acciones ───────────────────────────────────────────────────────────────
 
   void _addDigit(String digit) {
-    if (_pin.length < _pinLength) {
-      setState(() {
-        _pin += digit;
-        _error = null;
-      });
-
-      // Auto-submit cuando se completa el PIN
-      if (_pin.length == _pinLength) {
-        _submitPin();
-      }
-    }
+    if (_pin.length >= _pinLength) return;
+    setState(() {
+      _pin += digit;
+      _error = null;
+      _shaking = false;
+    });
+    if (_pin.length == _pinLength) _submitPin();
   }
 
   void _removeDigit() {
-    if (_pin.isNotEmpty) {
-      setState(() {
-        _pin = _pin.substring(0, _pin.length - 1);
-        _error = null;
-      });
-    }
+    if (_pin.isEmpty) return;
+    setState(() {
+      _pin = _pin.substring(0, _pin.length - 1);
+      _error = null;
+      _shaking = false;
+    });
   }
 
-  void _clearPin() {
-    setState(() {
-      _pin = '';
-      _error = null;
-    });
+  void _clearPin() => setState(() {
+    _pin = '';
+    _error = null;
+    _shaking = false;
+  });
+
+  /// Lanza la animación shake + colorea rojo 1 s
+  Future<void> _triggerShake() async {
+    setState(() => _shaking = true);
+    _shakeCtrl.forward(from: 0);
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (mounted) setState(() => _shaking = false);
   }
 
   Future<void> _submitPin() async {
     if (_pin.length != _pinLength) return;
 
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    setState(() { _isLoading = true; _error = null; });
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    final restaurantProvider =
-        Provider.of<RestaurantProvider>(context, listen: false);
+    final rp   = Provider.of<RestaurantProvider>(context, listen: false);
 
-    final restaurantId = restaurantProvider.currentRestaurantId;
+    final restaurantId = rp.currentRestaurantId;
     if (restaurantId == null) {
-      setState(() {
-        _isLoading = false;
-        _error = 'No hay restaurante seleccionado';
-        _pin = '';
-      });
+      setState(() { _isLoading = false; _error = 'No hay restaurante seleccionado'; _pin = ''; });
+      _triggerShake();
       return;
     }
 
-    final success = await auth.loginWithPin(
-      pin: _pin,
-      restaurantId: restaurantId,
-    );
-
+    final success = await auth.login(_pin, restaurantId);
     if (!mounted) return;
 
     if (success) {
-      // Actualizar PosProvider con el userId
-      final posProvider = Provider.of<PosProvider>(context, listen: false);
-      posProvider.setUserId(auth.user!.id);
+      // Actualizar PosProvider
+      final pos = Provider.of<PosProvider>(context, listen: false);
+      pos.setUserId(auth.user!.id);
+      if (rp.currentRestaurantId != null) pos.setRestaurantId(rp.currentRestaurantId!);
+      if (rp.currentTenantId != null) pos.setTenantId(rp.currentTenantId!);
 
-      // Verificar permisos si se especificaron
-      if (widget.requiredPermission != null &&
-          !auth.hasPermission(widget.requiredPermission!)) {
+      // Verificar permisos
+      if (widget.requiredPermission != null && !auth.hasPermission(widget.requiredPermission!)) {
         setState(() {
           _isLoading = false;
-          _error =
-              'Tu rol (${auth.roleName}) no tiene permiso para ${widget.roleName ?? "esta función"}';
+          _error = 'Tu rol (${auth.roleName}) no tiene permiso para ${widget.roleName ?? "esta función"}';
           _pin = '';
         });
-        // Logout porque no tiene permisos para lo solicitado
+        _triggerShake();
         await auth.logout();
         return;
       }
-
       if (widget.requiredRoles != null && !auth.hasRole(widget.requiredRoles!)) {
         setState(() {
           _isLoading = false;
-          _error =
-              'Tu rol (${auth.roleName}) no tiene acceso a ${widget.roleName ?? "esta función"}';
+          _error = 'Tu rol (${auth.roleName}) no tiene acceso a ${widget.roleName ?? "esta función"}';
           _pin = '';
         });
+        _triggerShake();
         await auth.logout();
         return;
       }
 
-      // Login exitoso — navegar
+      // Navegar
       if (widget.redirectRoute != null) {
         Navigator.pushReplacementNamed(context, widget.redirectRoute!);
       } else {
-        Navigator.pushReplacementNamed(context, '/home');
+        _navigateByRole(auth);
       }
     } else {
-      setState(() {
-        _isLoading = false;
-        _error = auth.error ?? 'PIN incorrecto';
-        _pin = '';
-      });
+      setState(() { _isLoading = false; _error = auth.error ?? 'PIN incorrecto'; _pin = ''; });
+      _triggerShake();
     }
   }
 
+  void _navigateByRole(AuthProvider auth) {
+    switch (auth.roleName.toLowerCase()) {
+      case 'cashier' || 'cajero':
+        Navigator.pushReplacementNamed(context, '/cashier');
+      case 'waiter' || 'mesero':
+        Navigator.pushReplacementNamed(context, '/waiter');
+      case 'cook' || 'cocinero':
+        Navigator.pushReplacementNamed(context, '/kitchen');
+      case 'bartender':
+        Navigator.pushReplacementNamed(context, '/kitchen');
+      case 'manager' || 'gerente' || 'admin' || 'super_admin':
+        Navigator.pushReplacementNamed(context, '/home');
+      default:
+        Navigator.pushReplacementNamed(context, '/home');
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
+    final restaurantProvider = context.watch<RestaurantProvider>();
+    final brandColor = restaurantProvider.primaryColor;
+    final restaurantName = restaurantProvider.config.displayName.isNotEmpty
+        ? restaurantProvider.config.displayName
+        : 'THALO';
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      appBar: AppBar(
-        backgroundColor: _primaryColor,
-        foregroundColor: Colors.white,
-        title: Text(widget.roleName != null
-            ? 'Acceso: ${widget.roleName}'
-            : 'Iniciar Sesión'),
-        elevation: 0,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            width: 400,
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Ícono
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: _primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Icon(
-                    Icons.lock_outline,
-                    size: 48,
-                    color: _primaryColor,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Título
-                const Text(
-                  'Ingresa tu PIN',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1D2939),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Introduce tu PIN de ${_pinLength} dígitos',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // Indicadores de PIN
-                _buildPinIndicators(),
-                const SizedBox(height: 16),
-
-                // Error
-                if (_error != null) ...[
+      backgroundColor: _kBg,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // ── Logo ────────────────────────────────────────
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                    width: 88,
+                    height: 88,
                     decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.error_outline,
-                            color: Colors.red.shade700, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _error!,
-                            style: TextStyle(
-                              color: Colors.red.shade700,
-                              fontSize: 13,
-                            ),
-                          ),
+                      color: brandColor,
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: [
+                        BoxShadow(
+                          color: brandColor.withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
+                    child: const Icon(Icons.restaurant, size: 44, color: Colors.white),
                   ),
-                  const SizedBox(height: 16),
-                ],
+                  const SizedBox(height: 20),
 
-                // Loading
-                if (_isLoading) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: CircularProgressIndicator(color: _primaryColor),
-                  ),
-                ] else ...[
-                  // Teclado numérico
-                  _buildNumPad(),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPinIndicators() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(_pinLength, (index) {
-        final filled = index < _pin.length;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.symmetric(horizontal: 10),
-          width: filled ? 20 : 18,
-          height: filled ? 20 : 18,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: filled ? _primaryColor : Colors.transparent,
-            border: Border.all(
-              color: filled ? _primaryColor : Colors.grey.shade400,
-              width: 2,
-            ),
-            boxShadow: filled
-                ? [
-                    BoxShadow(
-                      color: _primaryColor.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                  // ── Nombre del restaurante ─────────────────────
+                  Text(
+                    restaurantName,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      color: Color(0xFF1F2937),
+                      fontFamily: 'Montserrat',
                     ),
-                  ]
-                : null,
-          ),
-        );
-      }),
-    );
-  }
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.roleName != null
+                        ? 'Acceso: ${widget.roleName}'
+                        : 'Ingresa tu PIN',
+                    style: const TextStyle(fontSize: 14, color: _kSubtitle),
+                  ),
+                  const SizedBox(height: 36),
 
-  Widget _buildNumPad() {
-    return Column(
-      children: [
-        // Filas 1-2-3, 4-5-6, 7-8-9
-        for (int row = 0; row < 3; row++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (int col = 1; col <= 3; col++)
-                  _buildNumKey('${row * 3 + col}'),
-              ],
-            ),
-          ),
-        // Fila: Clear, 0, Backspace
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _buildActionKey(
-              icon: Icons.clear_all,
-              color: Colors.orange,
-              onTap: _clearPin,
-            ),
-            _buildNumKey('0'),
-            _buildActionKey(
-              icon: Icons.backspace_outlined,
-              color: Colors.red.shade400,
-              onTap: _removeDigit,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+                  // ── Círculos PIN (con shake) ───────────────────
+                  AnimatedBuilder(
+                    animation: _shakeAnim,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(_shakeAnim.value, 0),
+                        child: child,
+                      );
+                    },
+                    child: _buildPinCircles(),
+                  ),
+                  const SizedBox(height: 20),
 
-  Widget _buildNumKey(String digit) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        elevation: 2,
-        shadowColor: Colors.black12,
-        child: InkWell(
-          onTap: () => _addDigit(digit),
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            width: 80,
-            height: 64,
-            child: Center(
-              child: Text(
-                digit,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1D2939),
-                ),
+                  // ── Error ──────────────────────────────────────
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: _error != null
+                        ? Padding(
+                            key: ValueKey(_error),
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.error_outline, color: _kPinError, size: 18),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    _error!,
+                                    style: const TextStyle(color: _kPinError, fontSize: 13, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const SizedBox.shrink(key: ValueKey('no-error')),
+                  ),
+
+                  // ── Loading o Teclado ──────────────────────────
+                  if (_isLoading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: CircularProgressIndicator(color: _kPinActive),
+                    )
+                  else
+                    _buildNumPad(),
+
+                  const SizedBox(height: 40),
+
+                  // ── Botón volver ───────────────────────────────
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 16, color: _kSubtitle),
+                    label: const Text('Volver', style: TextStyle(color: _kSubtitle)),
+                  ),
+                ],
               ),
             ),
           ),
@@ -343,26 +303,121 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildActionKey({
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Material(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            width: 80,
-            height: 64,
-            child: Center(
-              child: Icon(icon, color: color, size: 28),
+  // ── PIN circles ────────────────────────────────────────────────────────────
+
+  Widget _buildPinCircles() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(_pinLength, (i) {
+        final filled = i < _pin.length;
+        final circleColor = _shaking
+            ? _kPinError
+            : (filled ? _kPinActive : Colors.transparent);
+        final borderColor = _shaking
+            ? _kPinError
+            : (filled ? _kPinActive : const Color(0xFFD1D5DB));
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          margin: const EdgeInsets.symmetric(horizontal: 12),
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: circleColor,
+            border: Border.all(color: borderColor, width: 2),
+            boxShadow: filled && !_shaking
+                ? [BoxShadow(color: _kPinActive.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 3))]
+                : null,
+          ),
+        );
+      }),
+    );
+  }
+
+  // ── Numpad ─────────────────────────────────────────────────────────────────
+
+  Widget _buildNumPad() {
+    return Column(
+      children: [
+        for (int row = 0; row < 3; row++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (int col = 1; col <= 3; col++)
+                  _numKey('${row * 3 + col}'),
+              ],
             ),
           ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _actionKey(icon: Icons.clear_all_rounded, onTap: _clearPin),
+            _numKey('0'),
+            _actionKey(icon: Icons.backspace_outlined, onTap: _removeDigit),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _numKey(String digit) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: GestureDetector(
+        onTap: () => _addDigit(digit),
+        child: Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _kKeyBg,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            digit,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w600,
+              color: _kNumText,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _actionKey({required IconData icon, required VoidCallback onTap}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _kBg,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, color: _kSubtitle, size: 24),
         ),
       ),
     );

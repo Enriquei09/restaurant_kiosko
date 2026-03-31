@@ -24,6 +24,116 @@ import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.
 import 'package:restaurant_kiosco/presentation/screens/runner/runner_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/auth/login_screen.dart';
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Helper classes para verificación de roles
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Define una ruta protegida con roles permitidos
+class _RoleRoute {
+  final List<String> allowedRoles;
+  final WidgetBuilder builder;
+
+  const _RoleRoute({
+    required this.allowedRoles,
+    required this.builder,
+  });
+}
+
+/// Guard que verifica autenticación y rol antes de mostrar la pantalla
+class _RoleGuard extends StatelessWidget {
+  final String routeName;
+  final _RoleRoute roleRoute;
+
+  const _RoleGuard({
+    required this.routeName,
+    required this.roleRoute,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, auth, _) {
+        // No autenticado → redirigir a login
+        if (!auth.isAuthenticated) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              '/login',
+              (route) => route.settings.name == '/home',
+            );
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final userRole = auth.roleName.toLowerCase();
+
+        // Verificar si tiene permiso para esta ruta
+        final hasAccess = roleRoute.allowedRoles
+            .any((role) => role.toLowerCase() == userRole);
+
+        if (!hasAccess) {
+          // Redirigir a su pantalla correcta según su rol
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _redirectToCorrectScreen(context, userRole);
+          });
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.block, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Acceso denegado',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tu rol ($userRole) no tiene acceso a esta pantalla',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // Tiene acceso → limpiar historial y mostrar pantalla
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              routeName,
+              (route) => false, // Limpiar todo el historial
+            );
+          }
+        });
+
+        return roleRoute.builder(context);
+      },
+    );
+  }
+
+  /// Redirige al usuario a su pantalla correcta según su rol
+  void _redirectToCorrectScreen(BuildContext context, String role) {
+    final route = switch (role) {
+      'cashier' || 'cajero'       => '/cashier',
+      'cook' || 'cocinero'        => '/kitchen',
+      'bartender'                 => '/kitchen',
+      'waiter' || 'mesero'        => '/waiter',
+      'runner'                    => '/runner',
+      _                           => '/home', // admin, manager, supervisor
+    };
+
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      route,
+      (r) => false, // Limpiar historial
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -47,6 +157,48 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  /// Genera rutas con verificación de rol y limpieza de historial
+  Route<dynamic>? _generateRoute(RouteSettings settings) {
+    // Rutas protegidas por rol con limpieza de historial
+    final protectedRoutes = <String, _RoleRoute>{
+      '/kitchen': _RoleRoute(
+        allowedRoles: ['cook', 'bartender', 'admin', 'owner', 'manager', 'supervisor'],
+        builder: (_) => const KitchenScreen(),
+      ),
+      '/cashier': _RoleRoute(
+        allowedRoles: ['cashier', 'admin', 'owner', 'manager', 'supervisor'],
+        builder: (_) => const CashierScreen(),
+      ),
+      '/terminal-selection': _RoleRoute(
+        allowedRoles: ['cashier', 'admin', 'owner', 'manager', 'supervisor'],
+        builder: (_) => const TerminalSelectionScreen(),
+      ),
+      '/waiter': _RoleRoute(
+        allowedRoles: ['waiter', 'admin', 'owner', 'manager', 'supervisor'],
+        builder: (_) => const WaiterScreen(),
+      ),
+      '/runner': _RoleRoute(
+        allowedRoles: ['runner', 'admin', 'owner', 'manager', 'supervisor'],
+        builder: (_) => const RunnerScreen(),
+      ),
+    };
+
+    final routeName = settings.name;
+    if (routeName == null || !protectedRoutes.containsKey(routeName)) {
+      return null; // Dejar que MaterialApp maneje las rutas normales
+    }
+
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (context) {
+        return _RoleGuard(
+          routeName: routeName,
+          roleRoute: protectedRoutes[routeName]!,
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<RestaurantProvider>(
@@ -57,21 +209,18 @@ class MyApp extends StatelessWidget {
               ? restaurantProvider.config.displayName
               : 'THALO Kiosk',
           theme: restaurantProvider.themeData,
-          home: const SplashScreen(),
+          home: const _AppGate(),
+          onGenerateRoute: (settings) => _generateRoute(settings),
           routes: {
             '/home': (context) => const HomeScreen(),
             '/login': (context) => const LoginScreen(),
+            '/restaurant-selection': (context) => const RestaurantSelectionScreen(),
+            // Rutas públicas (kiosko cliente)
             '/menu': (context) => const KioskScreenWrapper(child: MenuScreen()),
-            '/kitchen': (context) => const KitchenScreen(),
-            '/cashier': (context) => const CashierScreen(),
-            '/terminal-selection': (context) => const TerminalSelectionScreen(),
-            '/waiter': (context) => const WaiterScreen(),
-            '/runner': (context) => const RunnerScreen(),
             '/kiosk/order-type': (context) => const KioskScreenWrapper(child: OrderTypeScreen()),
             '/kiosk/table-input': (context) => const KioskScreenWrapper(child: TableInputScreen()),
             '/kiosk/table-selection': (context) => const KioskScreenWrapper(child: KioskTableSelectionScreen()),
             '/checkout': (context) => const CheckoutScreen(),
-            '/restaurant-selection': (context) => const RestaurantSelectionScreen(),
           },
         );
       },
@@ -254,7 +403,7 @@ class HomeScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: color.withOpacity(0.8),
+                color: color.withValues(alpha: 0.8),
               ),
             ),
           ],
@@ -302,9 +451,18 @@ class HomeScreen extends StatelessWidget {
       return;
     }
 
-    // Actualizar userId en PosProvider
+    // Actualizar userId, restaurantId y tenantId en PosProvider
     final posProvider = Provider.of<PosProvider>(context, listen: false);
     posProvider.setUserId(auth.user!.id);
+    
+    // Sincronizar restaurantId del RestaurantProvider al PosProvider
+    final restaurantProvider = Provider.of<RestaurantProvider>(context, listen: false);
+    if (restaurantProvider.currentRestaurantId != null) {
+      posProvider.setRestaurantId(restaurantProvider.currentRestaurantId!);
+    }
+    if (restaurantProvider.currentTenantId != null) {
+      posProvider.setTenantId(restaurantProvider.currentTenantId!);
+    }
 
     Navigator.pushNamed(context, route);
   }
@@ -317,6 +475,99 @@ class HomeScreen extends StatelessWidget {
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _AppGate — enrutador reactivo principal
+//
+// 1. Inicializa el restaurante y restaura la sesión de auth en paralelo.
+// 2. Muestra SplashScreen mientras carga.
+// 3. Escucha AuthProvider y, si el usuario está autenticado,
+//    redirige automáticamente según el rol con un switch.
+// ─────────────────────────────────────────────────────────────────────────────
+class _AppGate extends StatefulWidget {
+  const _AppGate();
+
+  @override
+  State<_AppGate> createState() => _AppGateState();
+}
+
+class _AppGateState extends State<_AppGate> {
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+  }
+
+  Future<void> _init() async {
+    final restaurantProvider =
+        Provider.of<RestaurantProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final cartModel    = Provider.of<CartModel>(context, listen: false);
+    final posProvider  = Provider.of<PosProvider>(context, listen: false);
+
+    // Inicializar restaurante y sesion de auth en paralelo
+    await Future.wait([
+      restaurantProvider.initialize(),
+      authProvider.restoreSession(),
+    ]);
+
+    // Breve pausa para mostrar el splash
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (!mounted) return;
+
+    // Configurar cart y POS si hay restaurante seleccionado
+    if (restaurantProvider.hasSelection) {
+      cartModel.setRestaurantId(restaurantProvider.currentRestaurantId!);
+      cartModel.setTaxRate(restaurantProvider.config.taxRate);
+
+      posProvider.setRestaurantId(restaurantProvider.currentRestaurantId!);
+      if (restaurantProvider.currentTenantId != null) {
+        posProvider.setTenantId(restaurantProvider.currentTenantId!);
+      }
+      if (authProvider.isAuthenticated && authProvider.user != null) {
+        posProvider.setUserId(authProvider.user!.id);
+      }
+    }
+
+    setState(() => _ready = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Mientras inicializa, mostrar splash
+    if (!_ready) return const SplashScreen();
+
+    final restaurantProvider = context.watch<RestaurantProvider>();
+
+    // Sin restaurante configurado → pantalla de seleccion
+    if (!restaurantProvider.hasSelection) {
+      return const RestaurantSelectionScreen();
+    }
+
+    // Con restaurante → escuchar AuthProvider y redirigir por rol
+    return Consumer<AuthProvider>(
+      builder: (context, auth, _) {
+        // No autenticado → pantalla de selección de modulo
+        if (!auth.isAuthenticated) return const HomeScreen();
+
+        // Autenticado → switch por rol
+        return switch (auth.roleName.toLowerCase()) {
+          'cashier'                    => const CashierScreen(),
+          'cook' || 'bartender'        => const KitchenScreen(),
+          'waiter'                     => const WaiterScreen(),
+          'runner'                     => const RunnerScreen(),
+          'kiosk'                      => const KioskScreenWrapper(
+                                           child: MenuScreen()),
+          _                            => const HomeScreen(),
+          // admin, owner, manager, supervisor → pantalla de seleccion
+        };
+      },
     );
   }
 }

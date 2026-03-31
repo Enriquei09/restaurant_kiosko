@@ -55,13 +55,35 @@ class NewCard extends StatelessWidget {
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(12),
               ),
-              //Ruta de la Imagen
-              child: Image.asset(
-                imagePath,
-                height: 80,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
+              child: imagePath.isNotEmpty && imagePath.startsWith('http')
+                  ? Image.network(
+                      imagePath,
+                      height: 80,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        height: 80,
+                        color: Colors.grey.shade200,
+                        child: const Icon(Icons.restaurant_menu, size: 40, color: Colors.grey),
+                      ),
+                    )
+                  : imagePath.isNotEmpty
+                    ? Image.asset(
+                        imagePath,
+                        height: 80,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 80,
+                          color: Colors.grey.shade200,
+                          child: const Icon(Icons.restaurant_menu, size: 40, color: Colors.grey),
+                        ),
+                      )
+                    : Container(
+                        height: 80,
+                        color: Colors.grey.shade200,
+                        child: const Icon(Icons.restaurant_menu, size: 40, color: Colors.grey),
+                      ),
             ),
             Padding(
               padding: const EdgeInsets.all(8.0),

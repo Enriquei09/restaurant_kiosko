@@ -16,11 +16,50 @@ class MenuScreen extends StatefulWidget {
 class _MenuScreenState extends State<MenuScreen> {
   String selectedCategoryName = '';
   List<ProductGroup> productGroups = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    loadCategory(1); // cargar categoría 1 por defecto
+    _loadFirstCategory();
+  }
+
+  Future<void> _loadFirstCategory() async {
+    try {
+      // Obtener todas las categorías del restaurante actual
+      final categories = await ApiService.fetchCategories();
+      
+      if (!mounted) return;
+      
+      if (categories.isEmpty) {
+        setState(() {
+          _isLoading = false;
+          selectedCategoryName = 'Sin categorías';
+        });
+        return;
+      }
+      
+      // Cargar la primera categoría disponible
+      loadCategory(categories.first.id);
+      
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      
+      debugPrint('Error al cargar categorías: $e');
+      setState(() {
+        _isLoading = false;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al cargar el menú: ${e.toString()}'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   void loadCategory(int categoryId) async {
@@ -36,9 +75,16 @@ class _MenuScreenState extends State<MenuScreen> {
     } catch (e) {
       if (!mounted) return;
 
+      debugPrint('Error al cargar categoría $categoryId: $e');
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al cargar productos')),
+        SnackBar(
+          content: Text('No se puede cargar esta categoría'),
+          duration: const Duration(seconds: 2),
+        ),
       );
+      
+      // No intentar recargar, dejar que el usuario seleccione otra categoría
     }
   }
 

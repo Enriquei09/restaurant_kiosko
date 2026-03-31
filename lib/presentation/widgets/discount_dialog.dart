@@ -42,9 +42,15 @@ class _DiscountDialogState extends State<DiscountDialog> {
     
     setState(() {
       if (_discountType == 'percentage') {
-        _calculatedDiscount = (widget.orderTotal * value) / 100;
+        final pct = value.clamp(0, 100);
+        _calculatedDiscount = (widget.orderTotal * pct) / 100;
       } else {
         _calculatedDiscount = value;
+      }
+      
+      // No permitir que el descuento exceda el total
+      if (_calculatedDiscount > widget.orderTotal) {
+        _calculatedDiscount = widget.orderTotal;
       }
       
       // Requiere autorización si el descuento es > 10% o > $50
@@ -57,17 +63,17 @@ class _DiscountDialogState extends State<DiscountDialog> {
   Future<void> _handleApply() async {
     if (!_formKey.currentState!.validate()) return;
 
-    int? supervisorId;
+    ({int id, String pin})? supervisor;
     
     // Si requiere autorización, solicitar PIN
     if (_requiresAuth) {
-      supervisorId = await showSupervisorAuthDialog(
+      supervisor = await showSupervisorAuthDialog(
         context: context,
         title: 'Autorización Requerida',
         description: 'Este descuento requiere autorización de supervisor',
       );
       
-      if (supervisorId == null) return; // Usuario canceló
+      if (supervisor == null) return; // Usuario canceló
     }
 
     setState(() => _isProcessing = true);
@@ -86,18 +92,19 @@ class _DiscountDialogState extends State<DiscountDialog> {
         final discount = response['data'];
         final status = discount['status'];
         
-        // Si requiere autorización y tenemos supervisorId, autorizar automáticamente
-        if (status == 'pending' && supervisorId != null) {
+        // Si requiere autorización y tenemos supervisor, autorizar automáticamente
+        if (status == 'pending' && supervisor != null) {
           await ApiService.authorizeDiscount(
             discountId: discount['id'],
-            supervisorId: supervisorId,
+            supervisorId: supervisor.id,
+            supervisorPin: supervisor.pin,
           );
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              status == 'approved' || supervisorId != null
+              status == 'approved' || supervisor != null
                   ? 'Descuento aplicado exitosamente'
                   : 'Descuento pendiente de autorización',
             ),

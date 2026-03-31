@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/restaurant_provider.dart';
 import '../../providers/cart_model.dart';
+import '../../providers/pos_provider.dart';
 
 class RestaurantSelectionScreen extends StatefulWidget {
   final int tenantId;
 
   const RestaurantSelectionScreen({
     super.key,
-    this.tenantId = 1, // Default tenant ID
+    this.tenantId = 2, // Default tenant ID - Tacos El Güero
   });
 
   @override
@@ -208,6 +209,13 @@ class _RestaurantSelectionScreenState
                                 if (context.mounted) {
                                   final cart = Provider.of<CartModel>(context, listen: false);
                                   cart.setRestaurantId(restaurant.id);
+                                  // Sincronizar taxRate desde la configuración del restaurante
+                                  cart.setTaxRate(provider.config.taxRate);
+
+                                  // Sincronizar PosProvider
+                                  final posProvider = Provider.of<PosProvider>(context, listen: false);
+                                  posProvider.setRestaurantId(restaurant.id);
+                                  posProvider.setTenantId(widget.tenantId);
                                 }
                                 debugPrint('Navigating to home...');
                                 navigator.pushReplacementNamed('/home');

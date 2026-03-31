@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/presentation/screens/cashier/tables_screen.dart';
 import 'package:restaurant_kiosco/providers/pos_provider.dart';
+import 'package:restaurant_kiosco/providers/auth_provider.dart';
 
 class WaiterScreen extends StatelessWidget {
   const WaiterScreen({super.key});
@@ -9,8 +10,12 @@ class WaiterScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final posProvider = Provider.of<PosProvider>(context, listen: false);
-    final userName = posProvider.currentCashRegister?.user?.name ?? 'Usuario';
-    final userRole = 'Mesero'; // TODO: Obtener del rol real del usuario
+    final userName = context.read<AuthProvider>().userName.isNotEmpty
+        ? context.read<AuthProvider>().userName
+        : (posProvider.currentCashRegister?.user?.name ?? 'Usuario');
+    final userRole = context.read<AuthProvider>().roleName.isNotEmpty
+        ? context.read<AuthProvider>().roleName
+        : 'Mesero';
     
     return Scaffold(
       appBar: AppBar(
@@ -34,6 +39,47 @@ class WaiterScreen extends StatelessWidget {
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Avatar con menú de opciones
+            PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'logout') {
+                  final auth = context.read<AuthProvider>();
+                  await auth.logout();
+                  if (context.mounted) {
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      '/login',
+                      (route) => false,
+                    );
+                  }
+                }
+              },
+              offset: const Offset(0, 50),
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout_rounded, size: 20, color: Color(0xFFE91E63)),
+                      SizedBox(width: 12),
+                      Text('Salir'),
+                    ],
+                  ),
+                ),
+              ],
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(0xFFE91E63),
+                child: Text(
+                  userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ),
           ],

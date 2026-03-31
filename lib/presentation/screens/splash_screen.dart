@@ -1,53 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/restaurant_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/cart_model.dart';
 
-class SplashScreen extends StatefulWidget {
+/// Pantalla de carga visual.
+/// La logica de inicializacion y enrutamiento se maneja en _AppGate (main.dart).
+class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
-
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeApp();
-    });
-  }
-
-  Future<void> _initializeApp() async {
-    final restaurantProvider =
-        Provider.of<RestaurantProvider>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    // Inicializar en paralelo restaurante y sesión de auth
-    await Future.wait([
-      restaurantProvider.initialize(),
-      authProvider.restoreSession(),
-    ]);
-
-    // Esperar un momento para mostrar el splash
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (mounted) {
-      if (restaurantProvider.hasSelection) {
-        // Configurar el restaurantId en el cart para promociones
-        final cart = Provider.of<CartModel>(context, listen: false);
-        cart.setRestaurantId(restaurantProvider.currentRestaurantId!);
-
-        // Ya tiene restaurante seleccionado, ir al home
-        Navigator.pushReplacementNamed(context, '/home');
-      } else {
-        // No tiene restaurante, ir a selección
-        Navigator.pushReplacementNamed(context, '/restaurant-selection');
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:restaurant_kiosco/models/kitchen_order.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
+import 'package:restaurant_kiosco/service/reverb_service.dart';
 import 'package:restaurant_kiosco/providers/pos_provider.dart';
+import 'package:restaurant_kiosco/providers/auth_provider.dart';
 
 class KitchenScreen extends StatefulWidget {
   const KitchenScreen({super.key});
@@ -13,30 +16,127 @@ class KitchenScreen extends StatefulWidget {
   State<KitchenScreen> createState() => _KitchenScreenState();
 }
 
-class _KitchenScreenState extends State<KitchenScreen> {
+class _KitchenScreenState extends State<KitchenScreen>
+    with TickerProviderStateMixin {
   List<KitchenOrder> orders = [];
   Map<String, int> counts = {};
   bool isLoading = true;
   String? error;
   Timer? _pollTimer;
-  Timer? _elapsedTimer; // Refreshes urgency colors every minute
-  String selectedTab = 'active'; // 'active' (En Curso) or 'completed' (Completados)
+  Timer? _elapsedTimer;
+  Timer? _syncTimer;
+  int _secondsSinceSync = 0;
+  String selectedTab = 'active';
+
+  // ── WebSocket (Reverb) ──
+  ReverbService? _reverb;
+  bool _wsConnected = false;
+  String _syncLabel = 'Conectando…';
+
+  // ── Animación para nuevas órdenes ──
+  // IDs de órdenes que acaban de llegar por WS para marcar animación
+  final Set<int> _freshOrderIds = {};
 
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable();
     _loadOrders();
-    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadOrders());
+    _initWebSocket();
+    // Polling como fallback (cada 15s en vez de 10 ya que WS es primario)
+    _pollTimer =
+        Timer.periodic(const Duration(seconds: 15), (_) => _loadOrders());
     _elapsedTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-       if (mounted) setState(() {}); // Refresh UI for timestamps
+      if (mounted) setState(() {});
+    });
+    _syncTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _secondsSinceSync > 0) {
+        setState(() => _secondsSinceSync++);
+      }
     });
   }
 
   @override
   void dispose() {
+    WakelockPlus.disable();
+    _reverb?.dispose();
     _pollTimer?.cancel();
     _elapsedTimer?.cancel();
+    _syncTimer?.cancel();
     super.dispose();
+  }
+
+  // ── Iniciar conexión WebSocket a Reverb ──
+  Future<void> _initWebSocket() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.token;
+    if (token == null || token.isEmpty) return;
+
+    final restaurantId = await ConfigurationService.getRestaurantId();
+
+    _reverb = ReverbService(
+      token: token,
+      restaurantId: restaurantId,
+      onConnected: () {
+        if (mounted) {
+          setState(() {
+            _wsConnected = true;
+            _syncLabel = 'Recién';
+            _secondsSinceSync = 0;
+          });
+        }
+      },
+      onDisconnected: () {
+        if (mounted) setState(() => _wsConnected = false);
+      },
+      onEvent: _handleReverbEvent,
+      onError: (err) {
+        debugPrint('[KDS] Reverb error: $err');
+      },
+    );
+
+    await _reverb!.connect();
+  }
+
+  // ── Manejar eventos que llegan por WebSocket ──
+  void _handleReverbEvent(String event, Map<String, dynamic> data) {
+    if (!mounted) return;
+
+    if (event == 'OrderCreated' || event == '.OrderCreated') {
+      final orderData = data['order'] as Map<String, dynamic>?;
+      if (orderData == null) return;
+
+      // Solo nos interesan órdenes activas (confirmed/preparing) en el tab activo
+      final status = orderData['status'] as String? ?? '';
+      if (selectedTab == 'active' &&
+          (status == 'confirmed' || status == 'preparing')) {
+        // Construir KitchenOrder desde el payload del evento
+        final newOrder = KitchenOrder.fromJson({
+          ...orderData,
+          'order_details': orderData['items'] ?? [],
+        });
+
+        // Evitar duplicados
+        if (orders.any((o) => o.id == newOrder.id)) return;
+
+        setState(() {
+          orders.insert(0, newOrder);
+          _freshOrderIds.add(newOrder.id);
+          // Actualizar conteos
+          counts[status] = (counts[status] ?? 0) + 1;
+          _secondsSinceSync = 0;
+          _syncLabel = 'Recién';
+        });
+
+        // Limpiar marca de "nuevo" después de la animación
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) setState(() => _freshOrderIds.remove(newOrder.id));
+        });
+      } else {
+        // Si no es el tab activo, simplemente recargar
+        _loadOrders();
+      }
+    }
   }
 
   Future<void> _loadOrders() async {
@@ -58,6 +158,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
           counts = response.counts;
           isLoading = false;
           error = null;
+          _secondsSinceSync = 0;
         });
       }
     } catch (e) {
@@ -71,16 +172,31 @@ class _KitchenScreenState extends State<KitchenScreen> {
   }
   
    Future<void> _advanceOrder(int orderId) async {
-      // Move to next state automatically?
-      // Confirmed -> Preparing -> Ready -> Delivered?
-      // Or just active -> ready?
-      // User requested "En Curso" (Active) vs "Completados".
-      // If I click "Terminar" on an active order, it should go to 'ready'.
+      // Move to next state: confirmed → preparing → ready
       try {
-        await ApiService.updateOrderStatus(orderId: orderId, status: 'ready');
+        // Find the current order's status to determine next state
+        final currentOrder = orders.firstWhere(
+          (o) => o.id == orderId,
+          orElse: () => orders.first,
+        );
+        
+        String nextStatus;
+        if (currentOrder.status == 'confirmed') {
+          nextStatus = 'preparing';
+        } else if (currentOrder.status == 'preparing') {
+          nextStatus = 'ready';
+        } else {
+          nextStatus = 'ready'; // fallback
+        }
+        
+        await ApiService.updateOrderStatus(orderId: orderId, status: nextStatus);
         _loadOrders();
       } catch (e) {
-         // Show error
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')),
+          );
+        }
       }
   }
 
@@ -93,133 +209,444 @@ class _KitchenScreenState extends State<KitchenScreen> {
     final completedCount = (counts['ready'] ?? 0) + (counts['delivered'] ?? 0);
     
     final posProvider = Provider.of<PosProvider>(context, listen: false);
-    final userName = posProvider.currentCashRegister?.user?.name ?? 'Usuario';
-    final userRole = 'Cocinero'; // TODO: Obtener del rol real
+    final userName = context.read<AuthProvider>().userName.isNotEmpty
+        ? context.read<AuthProvider>().userName
+        : (posProvider.currentCashRegister?.user?.name ?? 'Usuario');
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        titleSpacing: 24,
-        title: Row(
-          children: [
-            // Time (Mock or Real)
-            Text(
-              _formatTime(DateTime.now()),
-              style: const TextStyle(
-                color: Colors.black, fontSize: 24, fontWeight: FontWeight.bold
-              ),
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: Column(
+        children: [
+          // ── Header ──
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            const SizedBox(width: 16),
-            const Text(
-              'Cocina',
-              style: TextStyle(
-                color: Colors.black, fontSize: 24, fontWeight: FontWeight.normal
-              ),
-            ),
-            const Spacer(),
-            
-            // Tabs
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(8),
-              ),
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 14),
+            child: SafeArea(
+              bottom: false,
               child: Row(
                 children: [
-                   _buildTab('Completados', 'completed', completedCount),
-                   _buildTab('En Curso', 'active', activeCount),
-                ],
-              ),
-            ),
-            const Spacer(),
-            
-            // User Profile con nombre
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircleAvatar(
-                    backgroundColor: Colors.grey.shade300,
-                    radius: 16,
-                    child: const Icon(Icons.person, color: Colors.black, size: 18),
-                  ),
-                  const SizedBox(width: 8),
+                  // Reloj
                   Text(
-                    '$userRole - $userName',
+                    _formatTime(DateTime.now()),
                     style: const TextStyle(
                       color: Colors.black,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Cocina',
+                    style: TextStyle(
+                      color: Colors.black45,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  const Spacer(),
+                  // Selector con pastillas redondeadas
+                  SegmentedButton<String>(
+                    segments: [
+                      ButtonSegment(
+                        value: 'active',
+                        label: Text(
+                          activeCount > 0
+                              ? 'En Curso ($activeCount)'
+                              : 'En Curso',
+                        ),
+                      ),
+                      ButtonSegment(
+                        value: 'completed',
+                        label: Text(
+                          completedCount > 0
+                              ? 'Completados ($completedCount)'
+                              : 'Completados',
+                        ),
+                      ),
+                    ],
+                    selected: {selectedTab},
+                    onSelectionChanged: (newSelection) {
+                      setState(() {
+                        selectedTab = newSelection.first;
+                        isLoading = true;
+                      });
+                      _loadOrders();
+                    },
+                    showSelectedIcon: false,
+                    style: ButtonStyle(
+                      backgroundColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return const Color(0xFF1B1B1B);
+                        }
+                        return Colors.grey.shade100;
+                      }),
+                      foregroundColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return Colors.white;
+                        }
+                        return Colors.black54;
+                      }),
+                      shape: WidgetStateProperty.all(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                      side: WidgetStateProperty.all(BorderSide.none),
+                      textStyle: WidgetStateProperty.all(
+                        const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  // ── Status de sincronización + WS ──
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Punto de estado WS
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _wsConnected
+                              ? Colors.green.shade400
+                              : Colors.orange.shade400,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        _secondsSinceSync < 15
+                            ? Icons.cloud_done_rounded
+                            : Icons.sync_rounded,
+                        size: 14,
+                        color: _secondsSinceSync < 15
+                            ? Colors.green.shade400
+                            : Colors.orange.shade400,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        _secondsSinceSync < 3
+                            ? _syncLabel
+                            : 'Hace ${_secondsSinceSync}s',
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                  // ── Avatar con menú: Cambiar Cocinero + Salir ──
+                  PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      if (value == 'switch') {
+                        _showQuickSwitchDialog(context);
+                      } else if (value == 'logout') {
+                        final auth = context.read<AuthProvider>();
+                        await auth.logout();
+                        if (mounted) {
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                            '/login',
+                            (route) => false,
+                          );
+                        }
+                      }
+                    },
+                    offset: const Offset(0, 50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        enabled: false,
+                        child: Text(
+                          userName,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'switch',
+                        child: Row(
+                          children: [
+                            Icon(Icons.swap_horiz_rounded, size: 20, color: Color(0xFF2196F3)),
+                            SizedBox(width: 12),
+                            Text('Cambiar Cocinero'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'logout',
+                        child: Row(
+                          children: [
+                            Icon(Icons.logout_rounded, size: 20, color: Color(0xFFE91E63)),
+                            SizedBox(width: 12),
+                            Text('Salir'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          userName,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: const Color(0xFFE91E63),
+                          child: Text(
+                            userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+          // ── Body ──
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : error != null
+                    ? Center(child: Text('Error: $error'))
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Responsive: adaptar tarjetas al ancho disponible
+                          final w = constraints.maxWidth;
+                          final maxExtent = w >= 1200
+                              ? 260.0  // Desktop / tablet landscape → ~5 cols
+                              : w >= 800
+                                  ? 240.0  // Tablet portrait → ~3-4 cols
+                                  : 200.0; // Móvil → 2 cols
+                          final aspect = w >= 800 ? 0.55 : 0.50;
+
+                          return Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: GridView.builder(
+                              gridDelegate:
+                                  SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: maxExtent,
+                                childAspectRatio: aspect,
+                                crossAxisSpacing: 14,
+                                mainAxisSpacing: 14,
+                              ),
+                              itemCount: orders.length,
+                              itemBuilder: (context, index) {
+                            final order = orders[index];
+                            final isFresh = _freshOrderIds.contains(order.id);
+                            return AnimatedScale(
+                              scale: isFresh ? 1.0 : 1.0,
+                              duration: const Duration(milliseconds: 400),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 600),
+                                curve: Curves.easeOutBack,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: isFresh
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFFE91E63)
+                                                .withValues(alpha: 0.35),
+                                            blurRadius: 18,
+                                            spreadRadius: 2,
+                                          ),
+                                        ]
+                                      : [],
+                                ),
+                                child: KitchenOrderCard(
+                                  order: order,
+                                  onAdvance: () => _advanceOrder(order.id),
+                                ),
+                              ),
+                            );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
       ),
-      body: isLoading 
-          ? const Center(child: CircularProgressIndicator()) 
-          : error != null 
-              ? Center(child: Text('Error: $error')) 
-              : Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 5, // 5 columns as per image roughly
-                      childAspectRatio: 0.60, // Tall cards
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
-                    itemCount: orders.length,
-                    itemBuilder: (context, index) {
-                      return KitchenOrderCard(
-                        order: orders[index],
-                        onAdvance: () => _advanceOrder(orders[index].id),
-                      );
-                    },
-                  ),
-                ),
     );
   }
   
+  // ── Quick Switch Dialog ──
+  Future<void> _showQuickSwitchDialog(BuildContext ctx) async {
+    final pinController = TextEditingController();
+    String? dialogError;
+
+    await showDialog(
+      context: ctx,
+      barrierDismissible: true,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (sbCtx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.swap_horiz_rounded,
+                      color: Color(0xFFE91E63), size: 24),
+                  SizedBox(width: 10),
+                  Text('Cambiar Cocinero',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Ingresa el PIN del nuevo cocinero para cambiar de usuario sin cerrar sesión.',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: pinController,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 12,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '• • • •',
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 28,
+                        letterSpacing: 12,
+                      ),
+                      counterText: '',
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                            color: Color(0xFFE91E63), width: 2),
+                      ),
+                    ),
+                  ),
+                  if (dialogError != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      dialogError!,
+                      style: TextStyle(
+                        color: Colors.red.shade600,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: Text('Cancelar',
+                      style: TextStyle(color: Colors.grey.shade600)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final pin = pinController.text.trim();
+                    if (pin.length < 4) {
+                      setDialogState(() {
+                        dialogError = 'El PIN debe tener al menos 4 dígitos';
+                      });
+                      return;
+                    }
+                    try {
+                      final auth = ctx.read<AuthProvider>();
+                      final restaurantId =
+                          await ConfigurationService.getRestaurantId();
+                      final ok = await auth.login(pin, restaurantId);
+                      if (ok) {
+                        if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                        if (mounted) {
+                          setState(() {});
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Bienvenido, ${auth.userName}'),
+                              backgroundColor: const Color(0xFFE91E63),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      } else {
+                        setDialogState(() {
+                          dialogError =
+                              auth.error ?? 'PIN inválido o sin permiso';
+                        });
+                      }
+                    } catch (e) {
+                      setDialogState(() {
+                        dialogError = 'Error: $e';
+                      });
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE91E63),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Cambiar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   String _formatTime(DateTime dt) {
     return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildTab(String label, String value, int count) {
-    final isSelected = selectedTab == value;
-    final color = isSelected ? Colors.black87 : Colors.grey.shade200;
-    final textColor = isSelected ? Colors.white : Colors.black54;
-
-    return InkWell(
-      onTap: () {
-        setState(() {
-          selectedTab = value;
-          isLoading = true;
-        });
-        _loadOrders();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          count > 0 ? '$label($count)' : label,
-          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
 }
 
 class KitchenOrderCard extends StatelessWidget {
@@ -232,134 +659,261 @@ class KitchenOrderCard extends StatelessWidget {
     required this.onAdvance,
   });
 
+  /// Color de urgencia según tiempo transcurrido (semáforo de cocina)
+  Color _urgencyColor(int elapsed) {
+    if (elapsed >= 11) return Colors.red.shade600;     // 🔴 Urgente
+    if (elapsed >= 6)  return Colors.orange.shade700;  // 🟠 Espera
+    return const Color(0xFF43A047);                    // 🟢 Nuevo
+  }
+
+  /// Etiqueta textual del semáforo
+  String _urgencyLabel(int elapsed) {
+    if (elapsed >= 11) return 'URGENTE';
+    if (elapsed >= 6)  return 'ESPERA';
+    return 'NUEVO';
+  }
+
   @override
   Widget build(BuildContext context) {
     final elapsed = order.elapsedMinutes;
-    // Urgency Logic
-    // Default: Black/Green (Safe)
-    // Warning: > 10 mins (Orange)
-    // Critical: > 20 mins (Red)
-    Color headerColor = Colors.black; // Default "Safe" or "New"
-    if (elapsed > 20) {
-      headerColor = Colors.red.shade700;
-    } else if (elapsed > 10) {
-      headerColor = Colors.orange.shade800;
-    } else {
-      headerColor = const Color(0xFF1B1B1B); // Blackish
-    }
+    final color = _urgencyColor(elapsed);
+    final timeStr =
+        '${order.createdAt.hour}:${order.createdAt.minute.toString().padLeft(2, '0')}';
 
-    final timeStr = "${order.createdAt.hour}:${order.createdAt.minute.toString().padLeft(2,'0')}";
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          // Header
-          Container(
-            color: headerColor,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          // ── Borde superior grueso de color (urgencia) ──
+          Container(height: 6, color: color),
+
+          // ── Cabecera info ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // Orden + hora
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '#Orden ${order.id}', 
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
+                      '#Orden ${order.id}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
                     ),
-                    Text(
-                      timeStr,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12)
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.access_time_rounded,
+                            size: 13, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
+                        Text(
+                          timeStr,
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Badge de minutos transcurridos + etiqueta
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${elapsed}m',
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _urgencyLabel(elapsed),
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                Text(
-                  order.orderTypeLabel, // "Llevar" vs "Comer Aquí"
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                // Tipo de orden
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    order.orderTypeLabel,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          
-          // Body
+
+          Divider(height: 1, color: Colors.grey.shade200),
+
+          // ── Items del pedido ──
           Expanded(
-            child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               child: ListView.builder(
+                padding: EdgeInsets.zero,
                 itemCount: order.items.length,
                 itemBuilder: (context, index) {
-                   // Truncate logic if needed, but ListView handles scroll.
-                   // The image showed +7 products.
-                   // If activity requires viewing all, scroll is better.
-                   // Getting strict to design:
-                   if (index > 5) {
-                     if (index == 6) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: Text(
-                             '+ ${order.items.length - 6} productos mas',
-                             style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                  if (index > 5) {
+                    if (index == 6) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '+ ${order.items.length - 6} más',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
                           ),
-                        );
-                     }
-                     return const SizedBox.shrink();
-                   }
-                   
-                   final item = order.items[index];
-                   return Padding(
-                     padding: const EdgeInsets.only(bottom: 12.0),
-                     child: Row(
-                       crossAxisAlignment: CrossAxisAlignment.start,
-                       children: [
-                         Text(
-                           '${item.quantity}',
-                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                         ),
-                         const SizedBox(width: 12),
-                         Expanded(
-                           child: Column(
-                             crossAxisAlignment: CrossAxisAlignment.start,
-                             children: [
-                               Text(
-                                 item.productName,
-                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                               ),
-                               // Modifiers / Notes in Red
-                               if (item.modifiers.isNotEmpty)
-                                 ...item.modifiers.map((m) => Text(m, style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold))),
-                               
-                               // Parse extra notes (like [PARA LLEVAR]) and hide if redundant, or show.
-                               // We appended [PARA LLEVAR] to the note. We probably want to hide it here since it's in header.
-                               if (item.notes != null)
-                                  _buildNoteText(item.notes!),
-                             ],
-                           ),
-                         ),
-                       ],
-                     ),
-                   );
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  }
+
+                  final item = order.items[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Cantidad en cajita gris
+                        Container(
+                          width: 26,
+                          height: 26,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${item.quantity}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.productName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              if (item.modifiers.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 3),
+                                  child: Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    children: item.modifiers.map((m) {
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.shade50,
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: Colors.orange.shade300,
+                                              width: 0.8),
+                                        ),
+                                        child: Text(
+                                          m,
+                                          style: TextStyle(
+                                            color: Colors.orange.shade800,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              if (item.notes != null)
+                                _buildNoteText(item.notes!),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
                 },
               ),
             ),
           ),
-          
-          // Footer (Action)
-          // Double Tap to complete? Or Button?
-          // Image implies interaction.
-          // I'll add a "Terminar" button or InkWell on Header?
-          // Let's make the whole card tappable or adding a footer button.
-          InkWell(
-            onTap: onAdvance,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              color: Colors.grey.shade100,
-              alignment: Alignment.center,
-              child: const Text('MARCAR LISTO', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+
+          // ── Botón LISTO (Rosa Mexicano, full-width) ──
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onAdvance,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE91E63),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
+                elevation: 0,
+              ),
+              child: const Text(
+                'LISTO',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  letterSpacing: 1.2,
+                ),
+              ),
             ),
           ),
         ],
@@ -368,13 +922,32 @@ class KitchenOrderCard extends StatelessWidget {
   }
 
   Widget _buildNoteText(String note) {
-    // Remove tags we added
-    final clean = note.replaceAll('[PARA COMER AQUÍ]', '').replaceAll('[PARA LLEVAR]', '').trim();
+    final clean = note
+        .replaceAll('[PARA COMER AQUÍ]', '')
+        .replaceAll('[PARA LLEVAR]', '')
+        .trim();
     if (clean.isEmpty) return const SizedBox.shrink();
-    
-    return Text(
-      clean,
-      style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.speaker_notes_outlined,
+              size: 12, color: Colors.red.shade400),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              clean,
+              style: TextStyle(
+                color: Colors.red.shade500,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

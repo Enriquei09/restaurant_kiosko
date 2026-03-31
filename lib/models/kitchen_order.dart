@@ -42,7 +42,7 @@ class KitchenOrder {
       createdAt: json['created_at'] is String 
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
-      items: (json['order_details'] as List)
+      items: ((json['order_details'] as List?) ?? [])
           .map((item) => KitchenOrderItem.fromJson(item))
           .toList(),
     );
@@ -112,9 +112,9 @@ class KitchenOrderItem {
 
     return KitchenOrderItem(
       id: json['id'],
-      productName: json['product']['name'],
-      quantity: json['quantity'],
-      unitPrice: double.parse(json['unit_price'].toString()),
+      productName: json['product']?['name']?.toString() ?? 'Producto desconocido',
+      quantity: json['quantity'] ?? 1,
+      unitPrice: double.tryParse(json['unit_price']?.toString() ?? '0') ?? 0,
       notes: json['notes'],
       modifiers: modifiersList,
     );

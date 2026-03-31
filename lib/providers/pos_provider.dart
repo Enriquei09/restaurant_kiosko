@@ -6,7 +6,7 @@ class PosProvider with ChangeNotifier {
   // Información del tenant y restaurante (valores por defecto)
   int _tenantId = 1;
   int _restaurantId = 1;
-  int? _locationId = 1; // Valor por defecto
+  int? _locationId; // null por defecto — la tabla locations puede estar vacía
   int _userId = 1;
 
   // Caja actual

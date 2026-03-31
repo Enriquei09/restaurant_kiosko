@@ -725,16 +725,16 @@ class _OpenCashRegisterFormState extends State<_OpenCashRegisterForm> {
 
   // Denominaciones
   final Map<String, TextEditingController> _denominations = {
-    'bills_1000': TextEditingController(text: '0'),
-    'bills_500': TextEditingController(text: '0'),
-    'bills_200': TextEditingController(text: '0'),
-    'bills_100': TextEditingController(text: '0'),
-    'bills_50': TextEditingController(text: '0'),
-    'bills_20': TextEditingController(text: '0'),
-    'coins_10': TextEditingController(text: '0'),
-    'coins_5': TextEditingController(text: '0'),
-    'coins_2': TextEditingController(text: '0'),
-    'coins_1': TextEditingController(text: '0'),
+    'bills_1000': TextEditingController(),
+    'bills_500': TextEditingController(),
+    'bills_200': TextEditingController(),
+    'bills_100': TextEditingController(),
+    'bills_50': TextEditingController(),
+    'bills_20': TextEditingController(),
+    'coins_10': TextEditingController(),
+    'coins_5': TextEditingController(),
+    'coins_2': TextEditingController(),
+    'coins_1': TextEditingController(),
   };
 
   @override
@@ -786,6 +786,7 @@ class _OpenCashRegisterFormState extends State<_OpenCashRegisterForm> {
         tenantId: widget.tenantId,
         restaurantId: widget.restaurantId,
         userId: widget.userId,
+        terminalId: Provider.of<PosProvider>(context, listen: false).selectedTerminal?.id ?? 0,
         openingBalance: double.parse(_openingBalanceController.text),
         openingNotes: _notesController.text.isEmpty ? null : _notesController.text,
         denominationDetails: denominationDetails,
@@ -928,6 +929,7 @@ class _OpenCashRegisterFormState extends State<_OpenCashRegisterForm> {
                 border: OutlineInputBorder(),
                 isDense: true,
                 contentPadding: EdgeInsets.all(8),
+                hintText: '0',
               ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1216,6 +1218,7 @@ class _CloseCashRegisterDialogState extends State<_CloseCashRegisterDialog> {
                 border: OutlineInputBorder(),
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                hintText: '0',
               ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1317,9 +1320,14 @@ class _ReportDialogState extends State<_ReportDialog> {
   Widget _buildReportContent() {
     if (_report == null) return const Center(child: Text('No hay datos'));
 
-    final data = _report!['data'] as Map<String, dynamic>;
-    final register = data['register'] as Map<String, dynamic>;
-    final payments = data['payments_by_method'] as Map<String, dynamic>;
+    // El backend devuelve: { cash_register: {...}, sales_summary: {...}, orders: [...] }
+    final register = _report!['cash_register'] as Map<String, dynamic>?;
+    final salesSummary = _report!['sales_summary'] as Map<String, dynamic>?;
+
+    if (register == null) return const Center(child: Text('No hay datos de caja'));
+
+    final user = register['user'] as Map<String, dynamic>?;
+    final cashierName = user?['name'] ?? 'N/A';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -1328,24 +1336,27 @@ class _ReportDialogState extends State<_ReportDialog> {
         children: [
           _buildSection('Información General', [
             _buildDataRow('Caja', '#${register['id']}'),
-            _buildDataRow('Cajero', register['cashier']['name']),
-            _buildDataRow('Apertura', register['opened_at'] ?? 'N/A'),
-            _buildDataRow('Estado', register['status']),
+            _buildDataRow('Cajero', cashierName),
+            _buildDataRow('Apertura', register['opened_at']?.toString() ?? 'N/A'),
+            _buildDataRow('Estado', register['status'] ?? 'N/A'),
           ]),
           const Divider(height: 32),
           _buildSection('Resumen Financiero', [
-            _buildDataRow('Monto Inicial', '\$${register['opening_balance']}'),
-            _buildDataRow('Ventas Totales', '\$${data['total_sales']}'),
-            _buildDataRow('Total Órdenes', '${data['total_orders']}'),
-            _buildDataRow('Monto Esperado', '\$${register['expected_balance'] ?? 'N/A'}'),
+            _buildDataRow('Monto Inicial', '\$${register['opening_balance'] ?? '0.00'}'),
+            _buildDataRow('Ventas Totales', '\$${salesSummary?['total_sales'] ?? '0.00'}'),
+            _buildDataRow('Total Órdenes', '${salesSummary?['total_orders'] ?? 0}'),
+            _buildDataRow('Balance Esperado', '\$${register['expected_balance'] ?? 'N/A'}'),
           ]),
-          const Divider(height: 32),
-          _buildSection('Pagos por Método', [
-            ...payments.entries.map((e) => _buildDataRow(
-                  e.key,
-                  '\$${e.value}',
-                )),
-          ]),
+          if (salesSummary != null) ...[
+            const Divider(height: 32),
+            _buildSection('Desglose por Método', [
+              _buildDataRow('Efectivo', '\$${salesSummary['cash_sales'] ?? '0.00'}'),
+              _buildDataRow('Tarjeta', '\$${salesSummary['card_sales'] ?? '0.00'}'),
+              _buildDataRow('Otros', '\$${salesSummary['other_sales'] ?? '0.00'}'),
+              if (salesSummary['total_tips'] != null && salesSummary['total_tips'] != 0)
+                _buildDataRow('Propinas', '\$${salesSummary['total_tips']}'),
+            ]),
+          ],
         ],
       ),
     );

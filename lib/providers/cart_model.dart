@@ -24,6 +24,13 @@ class CartModel extends ChangeNotifier {
     _restaurantId = id;
   }
 
+  /// Sincronizar taxRate desde la configuración del restaurante.
+  void setTaxRate(double rate) {
+    // rate viene como porcentaje (ej: 16.0), convertir a decimal (0.16)
+    taxRate = rate >= 1 ? rate / 100 : rate;
+    notifyListeners();
+  }
+
   List<CartItem> get items => List.unmodifiable(_items);
 
   int get totalItems => _items.fold(0, (sum, it) => sum + it.qty);

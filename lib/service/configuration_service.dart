@@ -5,7 +5,8 @@ import '../constants.dart';
 
 /// Servicio para manejar configuraciones dinámicas del restaurante
 class ConfigurationService {
-  static const String _restaurantIdKey = 'restaurant_id';
+  // Usar la misma key que RestaurantProvider para evitar desincronización
+  static const String _restaurantIdKey = 'selected_restaurant_id';
   static const String _restaurantNameKey = 'restaurant_name';
   static const String _configCacheKey = 'app_config_cache';
   static const String _configLastFetchKey = 'config_last_fetch';

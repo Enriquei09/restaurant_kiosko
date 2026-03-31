@@ -13,8 +13,8 @@ class ProductGroup {
 
 factory ProductGroup.fromJson(Map<String, dynamic> json) {
   return ProductGroup(
-    id: json['id'],
-    name: json['name'],
+    id: json['id'] ?? 0,
+    name: json['name']?.toString() ?? '',
     products: (json['products'] ?? [])
         .map<Product>((p) => Product.fromJson(p))
         .toList(),

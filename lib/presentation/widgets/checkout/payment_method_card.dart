@@ -5,7 +5,6 @@ import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/pos_provider.dart';
 import 'package:restaurant_kiosco/presentation/pages/payment/payment_screen.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
-import 'package:restaurant_kiosco/service/configuration_service.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart' as provider;
 
 class PaymentMethodCard extends StatefulWidget {
@@ -26,7 +25,6 @@ class _PaymentMethodCardState extends State<PaymentMethodCard> {
     super.dispose();
   }
 
-  @override
   @override
   Widget build(BuildContext context) {
     final payment = context.watch<PaymentModel>();
@@ -219,16 +217,13 @@ class _PaymentMethodCardState extends State<PaymentMethodCard> {
       // Let's use ConfigurationService.
       
       try {
-        final restaurantId = await ConfigurationService.getRestaurantId();
+        final posProvider = Provider.of<PosProvider>(context, listen: false);
+        final restaurantId = posProvider.restaurantId;
         // Calculate tip amount
-        // We need the TipModel. Using Provider to get it.
         final tipModel = Provider.of<provider.TipModel>(context, listen: false);
-        final subtotal = cart.subtotal; // Assuming cart has subtotal getter
+        final subtotal = cart.subtotal;
         final tipAmount = subtotal * tipModel.tipRate;
-        final total = cart.total + tipAmount; // cart.total usually includes tax. Add tip if not included.
-        // Alert: CartModel.total usually includes tax.
-        // Let's rely on backend calculation or pass exact figures.
-        // ApiService.createOrder takes 'items', 'total', 'tip'.
+        final total = cart.total + tipAmount;
         
         // Prepare items
         // Prepare items
@@ -259,7 +254,6 @@ class _PaymentMethodCardState extends State<PaymentMethodCard> {
         }
 
         // Obtener caja actual del PosProvider si existe
-        final posProvider = Provider.of<PosProvider>(context, listen: false);
         final currentCashRegisterId = posProvider.currentCashRegister?.id;
         final currentUserId = posProvider.userId; // Mesero responsable
 

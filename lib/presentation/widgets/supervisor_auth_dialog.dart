@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/pos_provider.dart';
 import '../../service/api_service.dart';
 
 class SupervisorAuthDialog extends StatefulWidget {
   final String title;
   final String description;
-  final Function(int supervisorId) onAuthorized;
+  final Function(int supervisorId, String pin) onAuthorized;
 
   const SupervisorAuthDialog({
     Key? key,
@@ -68,14 +70,14 @@ class _SupervisorAuthDialogState extends State<SupervisorAuthDialog> {
     try {
       final response = await ApiService.verifySupervisorPin(
         pin: _pin,
-        restaurantId: 1, // TODO: Obtener del contexto
+        restaurantId: context.read<PosProvider>().restaurantId,
       );
       
       if (response['success'] == true) {
         final supervisorId = response['data']['user']['id'] as int;
         if (mounted) {
           Navigator.of(context).pop();
-          widget.onAuthorized(supervisorId);
+          widget.onAuthorized(supervisorId, _pin);
         }
       } else {
         setState(() {
@@ -295,12 +297,13 @@ class _SupervisorAuthDialogState extends State<SupervisorAuthDialog> {
 }
 
 /// Función helper para mostrar el diálogo de autorización
-Future<int?> showSupervisorAuthDialog({
+/// Retorna un record (supervisorId, pin) o null si se cancela.
+Future<({int id, String pin})?> showSupervisorAuthDialog({
   required BuildContext context,
   required String title,
   required String description,
 }) async {
-  int? supervisorId;
+  ({int id, String pin})? result;
   
   await showDialog(
     context: context,
@@ -308,11 +311,11 @@ Future<int?> showSupervisorAuthDialog({
     builder: (context) => SupervisorAuthDialog(
       title: title,
       description: description,
-      onAuthorized: (id) {
-        supervisorId = id;
+      onAuthorized: (id, pin) {
+        result = (id: id, pin: pin);
       },
     ),
   );
   
-  return supervisorId;
+  return result;
 }

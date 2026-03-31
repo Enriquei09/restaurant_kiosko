@@ -57,13 +57,13 @@ class _RefundScreenState extends State<RefundScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // Solicitar autorización de supervisor
-    final supervisorId = await showSupervisorAuthDialog(
+    final supervisor = await showSupervisorAuthDialog(
       context: context,
       title: 'Autorizar Devolución',
       description: 'Se requiere autorización para procesar esta devolución',
     );
 
-    if (supervisorId == null) return; // Usuario canceló
+    if (supervisor == null) return; // Usuario canceló
 
     setState(() => _isProcessing = true);
 
@@ -86,7 +86,8 @@ class _RefundScreenState extends State<RefundScreen> {
         // Autorizar automáticamente
         await ApiService.authorizeRefund(
           refundId: refundId,
-          supervisorId: supervisorId,
+          supervisorId: supervisor.id,
+          supervisorPin: supervisor.pin,
         );
         
         // Completar devolución

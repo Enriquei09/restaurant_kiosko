@@ -11,12 +11,90 @@ import '../constants.dart';
 
 class ApiService {
 
+  // ── Configuración de timeouts ─────────────────────────────
+  static const Duration _defaultTimeout = Duration(seconds: 15);
+
+  // ── Cliente HTTP con timeout ──────────────────────────────
+  static http.Client? _httpClient;
+
+  /// Obtener cliente HTTP reutilizable.
+  static http.Client get _client {
+    _httpClient ??= http.Client();
+    return _httpClient!;
+  }
+
+  // Wrappers con timeout automático y detección de token expirado
+  static Future<http.Response> _get(Uri url, {Map<String, String>? headers}) async {
+    final res = await _client.get(url, headers: headers).timeout(_defaultTimeout);
+    _checkTokenExpiration(res);
+    return res;
+  }
+
+  static Future<http.Response> _post(Uri url, {Map<String, String>? headers, Object? body}) async {
+    final res = await _client.post(url, headers: headers, body: body).timeout(_defaultTimeout);
+    _checkTokenExpiration(res);
+    return res;
+  }
+
+  static Future<http.Response> _put(Uri url, {Map<String, String>? headers, Object? body}) async {
+    final res = await _client.put(url, headers: headers, body: body).timeout(_defaultTimeout);
+    _checkTokenExpiration(res);
+    return res;
+  }
+
+  static Future<http.Response> _patch(Uri url, {Map<String, String>? headers, Object? body}) async {
+    final res = await _client.patch(url, headers: headers, body: body).timeout(_defaultTimeout);
+    _checkTokenExpiration(res);
+    return res;
+  }
+
+  static Future<http.Response> _delete(Uri url, {Map<String, String>? headers}) async {
+    final res = await _client.delete(url, headers: headers).timeout(_defaultTimeout);
+    _checkTokenExpiration(res);
+    return res;
+  }
+
   // ── Token de autenticación global ─────────────────────────
   static String _authToken = '';
+
+  // ── Restaurant ID global ──────────────────────────────────
+  static int? _currentRestaurantId;
+
+  /// Configurar el restaurante actual para filtrar datos.
+  static void setRestaurantId(int? id) {
+    _currentRestaurantId = id;
+  }
+
+  /// Obtener el restaurante actual.
+  static int? get currentRestaurantId => _currentRestaurantId;
+
+  /// Callback para manejar expiración de token (redirigir a login)
+  static Function()? onTokenExpired;
 
   /// Configurar el token de autenticación para todas las requests.
   static void setAuthToken(String token) {
     _authToken = token;
+  }
+
+  /// Verificar si la respuesta indica token expirado.
+  /// Solo borra el token si el backend indica error de autenticación de token,
+  /// no en 401 genéricos (ej: PIN incorrecto de terminal).
+  static void _checkTokenExpiration(http.Response response) {
+    if (response.statusCode == 401 && _authToken.isNotEmpty) {
+      try {
+        final body = jsonDecode(response.body);
+        final error = body['error'] ?? '';
+        // Solo actuar si el backend dice que el token es inválido
+        if (error == 'unauthenticated' || error == 'invalid_token') {
+          _authToken = '';
+          onTokenExpired?.call();
+        }
+      } catch (_) {
+        // Si no se puede parsear, asumir token expirado por seguridad
+        _authToken = '';
+        onTokenExpired?.call();
+      }
+    }
   }
 
   /// Headers base para todas las requests.
@@ -24,12 +102,17 @@ class ApiService {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     if (_authToken.isNotEmpty) 'Authorization': 'Bearer $_authToken',
+    if (_currentRestaurantId != null) 'X-Restaurant-Id': _currentRestaurantId.toString(),
   };
+
+  /// Headers públicos para uso externo (ej: PollingService).
+  static Map<String, String> get headers => _headers;
 
   /// Headers solo para GET (sin Content-Type).
   static Map<String, String> get _getHeaders => {
     'Accept': 'application/json',
     if (_authToken.isNotEmpty) 'Authorization': 'Bearer $_authToken',
+    if (_currentRestaurantId != null) 'X-Restaurant-Id': _currentRestaurantId.toString(),
   };
 
   // ==================== AUTH ====================
@@ -40,7 +123,7 @@ class ApiService {
     required int restaurantId,
   }) async {
     final url = Uri.parse('$baseUrl/auth/login-pin');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: {
         'Accept': 'application/json',
@@ -68,13 +151,13 @@ class ApiService {
   /// Logout — revocar token.
   static Future<void> logout() async {
     final url = Uri.parse('$baseUrl/auth/logout');
-    await http.post(url, headers: _headers);
+    await _post(url, headers: _headers);
   }
 
   /// Obtener datos del usuario autenticado.
   static Future<Map<String, dynamic>> getMe() async {
     final url = Uri.parse('$baseUrl/auth/me');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -85,7 +168,7 @@ class ApiService {
 
   // ==================== CATEGORIES ====================
   static Future<List<Category>> fetchCategories() async {
-    final response = await http.get(Uri.parse('$baseUrl/categories'));
+    final response = await _get(Uri.parse('$baseUrl/categories'), headers: _getHeaders);
 
     if (response.statusCode == 200) {
       final List<dynamic> jsonList = jsonDecode(response.body);
@@ -97,11 +180,12 @@ class ApiService {
 
   // Método para obtener una categoría con productGroups y products
   static Future<Category> fetchCategoryWithProducts(int id) async {
-    final response = await http.get(Uri.parse('$baseUrl/categories/$id'), headers: _getHeaders);
+    final response = await _get(Uri.parse('$baseUrl/categories/$id'), headers: _getHeaders);
 
     if (response.statusCode == 200) {
       final Map<String, dynamic> json = jsonDecode(response.body);
-      return Category.fromJson(json);
+      final data = json['data'] ?? json; // Si viene envuelto en 'data', extraerlo
+      return Category.fromJson(data);
     } else {
       throw Exception('Error al cargar la categoría con productos');
     }
@@ -109,7 +193,7 @@ class ApiService {
 
   static Future<List<ModifierGroup>> fetchModifierGroups(int productId) async {
     final url = Uri.parse('$baseUrl/products/$productId/modifiers/grouped');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error ${res.statusCode}: ${res.body}');
@@ -132,7 +216,7 @@ class ApiService {
     };
     
     final url = Uri.parse('$baseUrl/kitchen/orders').replace(queryParameters: params);
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error ${res.statusCode}: ${res.body}');
@@ -147,7 +231,7 @@ class ApiService {
     required String status,
   }) async {
     final url = Uri.parse('$baseUrl/kitchen/orders/$orderId/status');
-    final res = await http.patch(
+    final res = await _patch(
       url,
       headers: _headers,
       body: jsonEncode({'status': status}),
@@ -172,7 +256,7 @@ class ApiService {
     double tip = 0.0,
   }) async {
     final url = Uri.parse('$baseUrl/orders');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -204,7 +288,7 @@ class ApiService {
   // Método para obtener información de un restaurante
   static Future<Restaurant> fetchRestaurant(int restaurantId) async {
     final url = Uri.parse('$baseUrl/restaurants/$restaurantId');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error ${res.statusCode}: ${res.body}');
@@ -221,7 +305,7 @@ class ApiService {
   // Obtener configuración/settings de un restaurante
   static Future<Map<String, dynamic>> fetchRestaurantSettings(int restaurantId) async {
     final url = Uri.parse('$baseUrl/restaurants/$restaurantId/settings');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error ${res.statusCode}: ${res.body}');
@@ -238,7 +322,7 @@ class ApiService {
   // Método para obtener restaurantes de un tenant
   static Future<List<Restaurant>> fetchTenantRestaurants(int tenantId) async {
     final url = Uri.parse('$baseUrl/tenants/$tenantId/restaurants');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error ${res.statusCode}: ${res.body}');
@@ -261,7 +345,7 @@ class ApiService {
     int? cashRegisterId,
   }) async {
     final url = Uri.parse('$baseUrl/orders/$orderId/pay');
-    final res = await http.patch(
+    final res = await _patch(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -279,7 +363,7 @@ class ApiService {
   // Obtener orden actual de una mesa
   static Future<Map<String, dynamic>?> getTableCurrentOrder(int tableId) async {
     final url = Uri.parse('$baseUrl/orders/table/$tableId/current');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
@@ -293,7 +377,7 @@ class ApiService {
   // Obtener órdenes pendientes de pago (para cashier)
   static Future<List<Map<String, dynamic>>> fetchPendingPaymentOrders(int restaurantId) async {
     final url = Uri.parse('$baseUrl/orders?restaurant_id=$restaurantId&payment_status=pending');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode != 200) {
       throw Exception('Error al obtener órdenes pendientes: ${res.body}');
@@ -313,7 +397,7 @@ class ApiService {
     required List<Map<String, dynamic>> items,
   }) async {
     final url = Uri.parse('$baseUrl/orders/$orderId/add-items');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({'items': items}),
@@ -333,7 +417,7 @@ class ApiService {
     required int restaurantId,
   }) async {
     final url = Uri.parse('$baseUrl/cash-registers/current');
-    final res = await http.get(
+    final res = await _get(
       url.replace(queryParameters: {
         'user_id': userId.toString(),
         'restaurant_id': restaurantId.toString(),
@@ -354,19 +438,19 @@ class ApiService {
     required int restaurantId,
     int? locationId,
     required int userId,
-    int? terminalId,
+    required int terminalId,
     required double openingBalance,
     String? openingNotes,
     Map<String, dynamic>? denominationDetails,
   }) async {
     final url = Uri.parse('$baseUrl/cash-registers/open');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
         'tenant_id': tenantId,
         'restaurant_id': restaurantId,
-        'location_id': locationId,
+        if (locationId != null) 'location_id': locationId,
         'user_id': userId,
         'terminal_id': terminalId,
         'opening_balance': openingBalance,
@@ -388,7 +472,7 @@ class ApiService {
     required int restaurantId,
   }) async {
     final url = Uri.parse('$baseUrl/cash-registers/terminals?tenant_id=$tenantId&restaurant_id=$restaurantId');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -405,7 +489,7 @@ class ApiService {
     required String pin,
   }) async {
     final url = Uri.parse('$baseUrl/cash-registers/authenticate-pin');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -435,7 +519,7 @@ class ApiService {
     Map<String, dynamic>? denominationDetails,
   }) async {
     final url = Uri.parse('$baseUrl/cash-registers/$cashRegisterId/close');
-    final res = await http.patch(
+    final res = await _patch(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -456,7 +540,7 @@ class ApiService {
   static Future<Map<String, dynamic>> getCashRegisterReport(
       int cashRegisterId) async {
     final url = Uri.parse('$baseUrl/cash-registers/$cashRegisterId/report');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -473,7 +557,7 @@ class ApiService {
     required int restaurantId,
   }) async {
     final url = Uri.parse('$baseUrl/auth/verify-supervisor');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -502,7 +586,7 @@ class ApiService {
     int? cashRegisterId,
   }) async {
     final url = Uri.parse('$baseUrl/payments/orders/$orderId/process');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -522,7 +606,7 @@ class ApiService {
   /// Obtener pagos de una orden
   static Future<Map<String, dynamic>> getOrderPayments(int orderId) async {
     final url = Uri.parse('$baseUrl/payments/orders/$orderId');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -544,7 +628,7 @@ class ApiService {
     required String reason,
   }) async {
     final url = Uri.parse('$baseUrl/discounts/orders/$orderId');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -566,12 +650,16 @@ class ApiService {
   static Future<Map<String, dynamic>> authorizeDiscount({
     required int discountId,
     required int supervisorId,
+    required String supervisorPin,
   }) async {
     final url = Uri.parse('$baseUrl/discounts/$discountId/authorize');
-    final res = await http.patch(
+    final res = await _patch(
       url,
       headers: _headers,
-      body: jsonEncode({'supervisor_id': supervisorId}),
+      body: jsonEncode({
+        'authorized_by': supervisorId,
+        'supervisor_pin': supervisorPin,
+      }),
     );
 
     if (res.statusCode == 200) {
@@ -584,7 +672,7 @@ class ApiService {
   /// Obtener descuentos pendientes
   static Future<Map<String, dynamic>> getPendingDiscounts() async {
     final url = Uri.parse('$baseUrl/discounts/pending');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -606,8 +694,8 @@ class ApiService {
     required int processedBy,
     required String refundMethod,
   }) async {
-    final url = Uri.parse('$baseUrl/refunds');
-    final res = await http.post(
+    final url = Uri.parse('$baseUrl/refunds/orders/$orderId');
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -631,12 +719,16 @@ class ApiService {
   static Future<Map<String, dynamic>> authorizeRefund({
     required int refundId,
     required int supervisorId,
+    required String supervisorPin,
   }) async {
     final url = Uri.parse('$baseUrl/refunds/$refundId/authorize');
-    final res = await http.patch(
+    final res = await _patch(
       url,
       headers: _headers,
-      body: jsonEncode({'supervisor_id': supervisorId}),
+      body: jsonEncode({
+        'authorized_by': supervisorId,
+        'supervisor_pin': supervisorPin,
+      }),
     );
 
     if (res.statusCode == 200) {
@@ -649,7 +741,7 @@ class ApiService {
   /// Completar devolución
   static Future<Map<String, dynamic>> completeRefund(int refundId) async {
     final url = Uri.parse('$baseUrl/refunds/$refundId/complete');
-    final res = await http.patch(url, headers: _headers);
+    final res = await _patch(url, headers: _headers);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -661,7 +753,7 @@ class ApiService {
   /// Obtener devoluciones pendientes
   static Future<Map<String, dynamic>> getPendingRefunds() async {
     final url = Uri.parse('$baseUrl/refunds/pending');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -673,7 +765,7 @@ class ApiService {
   /// Obtener devoluciones de una orden
   static Future<Map<String, dynamic>> getOrderRefunds(int orderId) async {
     final url = Uri.parse('$baseUrl/refunds/orders/$orderId');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
@@ -693,7 +785,7 @@ class ApiService {
     required String reason,
   }) async {
     final url = Uri.parse('$baseUrl/orders/$orderId/void');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -717,7 +809,7 @@ class ApiService {
     required String reason,
   }) async {
     final url = Uri.parse('$baseUrl/orders/$orderId/items/$detailId/courtesy');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -738,7 +830,7 @@ class ApiService {
   /// Obtener el menú completo del restaurante (categorías → subcategorías → productos + promos).
   static Future<List<Map<String, dynamic>>> fetchMenu(int restaurantId) async {
     final url = Uri.parse('$baseUrl/restaurants/$restaurantId/menu');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       final body = jsonDecode(res.body);
@@ -753,7 +845,7 @@ class ApiService {
   /// Obtener promociones activas del restaurante.
   static Future<List<Promotion>> fetchActivePromotions(int restaurantId) async {
     final url = Uri.parse('$baseUrl/restaurants/$restaurantId/promotions');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       final body = jsonDecode(res.body);
@@ -771,7 +863,7 @@ class ApiService {
     int? userId,
   }) async {
     final url = Uri.parse('$baseUrl/promotions/validate-cart');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -796,7 +888,7 @@ class ApiService {
     int? userId,
   }) async {
     final url = Uri.parse('$baseUrl/promotions/apply');
-    final res = await http.post(
+    final res = await _post(
       url,
       headers: _headers,
       body: jsonEncode({
@@ -818,13 +910,77 @@ class ApiService {
   /// Obtener configuración e imágenes del screensaver.
   static Future<ScreensaverConfig> fetchScreensaver(int restaurantId) async {
     final url = Uri.parse('$baseUrl/restaurants/$restaurantId/screensaver');
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       final body = jsonDecode(res.body);
       return ScreensaverConfig.fromJson(body['data']);
     } else {
       throw Exception('Error al cargar screensaver: ${res.statusCode}');
+    }
+  }
+
+  // ==================== TABLES ====================
+
+  /// Buscar órdenes con filtros avanzados
+  static Future<Map<String, dynamic>> fetchOrders({
+    required int restaurantId,
+    String? search,
+    String? status,
+    String? paymentStatus,
+    String? orderType,
+    String? paymentMethod,
+    String? dateFrom,
+    String? dateTo,
+    int page = 1,
+    int perPage = 20,
+  }) async {
+    final queryParams = <String, String>{
+      'restaurant_id': restaurantId.toString(),
+      'page': page.toString(),
+      'per_page': perPage.toString(),
+    };
+
+    if (search != null && search.isNotEmpty) queryParams['search'] = search;
+    if (status != null) queryParams['status'] = status;
+    if (paymentStatus != null) queryParams['payment_status'] = paymentStatus;
+    if (orderType != null) queryParams['order_type'] = orderType;
+    if (paymentMethod != null) queryParams['payment_method'] = paymentMethod;
+    if (dateFrom != null) queryParams['date_from'] = dateFrom;
+    if (dateTo != null) queryParams['date_to'] = dateTo;
+
+    final url = Uri.parse('$baseUrl/orders').replace(queryParameters: queryParams);
+    final res = await _get(url, headers: _getHeaders);
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    } else {
+      throw Exception('Error al buscar órdenes: ${res.body}');
+    }
+  }
+
+  /// Cancelar orden (DELETE /api/orders/{id}) — para cajeros
+  static Future<Map<String, dynamic>> cancelOrder(int orderId) async {
+    final url = Uri.parse('$baseUrl/orders/$orderId');
+    final res = await _delete(url, headers: _headers);
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    } else {
+      throw Exception('Error al cancelar orden: ${res.body}');
+    }
+  }
+
+  /// Obtener historial de actividad de una orden
+  static Future<List<Map<String, dynamic>>> fetchOrderActivityLog(int orderId) async {
+    final url = Uri.parse('$baseUrl/orders/$orderId/activity-log');
+    final res = await _get(url, headers: _getHeaders);
+
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body);
+      return List<Map<String, dynamic>>.from(data['data'] ?? []);
+    } else {
+      throw Exception('Error al cargar historial: ${res.body}');
     }
   }
 
@@ -837,7 +993,7 @@ class ApiService {
       if (locationId != null) 'location_id': locationId.toString(),
     };
     final url = Uri.parse('$baseUrl/tables').replace(queryParameters: queryParams);
-    final res = await http.get(url, headers: _getHeaders);
+    final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
       return List<Map<String, dynamic>>.from(jsonDecode(res.body));
@@ -849,7 +1005,7 @@ class ApiService {
   /// Actualizar estado de una mesa (available, occupied, reserved, etc.).
   static Future<Map<String, dynamic>> updateTableStatus(int tableId, String status) async {
     final url = Uri.parse('$baseUrl/tables/$tableId');
-    final res = await http.put(
+    final res = await _put(
       url,
       headers: _headers,
       body: jsonEncode({'status': status}),

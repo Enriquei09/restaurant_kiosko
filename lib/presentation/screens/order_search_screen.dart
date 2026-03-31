@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../service/api_service.dart';
+import '../../providers/pos_provider.dart';
+import 'refund_screen.dart';
 
 class OrderSearchScreen extends StatefulWidget {
   final int restaurantId;
@@ -61,20 +64,18 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
         queryParams['end_date'] = _endDate!.toIso8601String().split('T')[0];
       }
 
-      // Por ahora usamos fetchKitchenOrders que es el disponible
-      final response = await ApiService.fetchKitchenOrders(
+      // Usar el endpoint correcto con todos los filtros
+      final response = await ApiService.fetchOrders(
         restaurantId: widget.restaurantId,
+        search: _searchController.text.isNotEmpty ? _searchController.text : null,
+        paymentStatus: _selectedPaymentStatus,
+        orderType: _selectedOrderType,
+        dateFrom: _startDate != null ? _startDate!.toIso8601String().split('T')[0] : null,
+        dateTo: _endDate != null ? _endDate!.toIso8601String().split('T')[0] : null,
       );
       
       setState(() {
-        _orders = response.orders.map((o) => {
-          'id': o.id,
-          'total': o.total,
-          'payment_status': 'pending',
-          'order_type': 'dine_in',
-          'table_number': o.tableName,
-          'created_at': DateTime.now().toIso8601String(),
-        }).toList();
+        _orders = List<dynamic>.from(response['data'] ?? []);
         _isLoading = false;
       });
     } catch (e) {
@@ -537,7 +538,7 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
 // HOJA DE DETALLES DE ORDEN
 // ============================================================================
 
-class _OrderDetailsSheet extends StatelessWidget {
+class _OrderDetailsSheet extends StatefulWidget {
   final Map<String, dynamic> order;
   final ScrollController scrollController;
 
@@ -547,9 +548,45 @@ class _OrderDetailsSheet extends StatelessWidget {
   });
 
   @override
+  State<_OrderDetailsSheet> createState() => _OrderDetailsSheetState();
+}
+
+class _OrderDetailsSheetState extends State<_OrderDetailsSheet> {
+  List<Map<String, dynamic>> _activityLogs = [];
+  bool _loadingLogs = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchActivityLogs();
+  }
+
+  Future<void> _fetchActivityLogs() async {
+    try {
+      final logs = await ApiService.fetchOrderActivityLog(widget.order['id']);
+      if (mounted) {
+        setState(() {
+          _activityLogs = logs;
+          _loadingLogs = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingLogs = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final details = order['details'] as List<dynamic>? ?? [];
-    final total = double.tryParse(order['total'].toString()) ?? 0;
+    final details = widget.order['order_details'] as List<dynamic>? ??
+        widget.order['details'] as List<dynamic>? ?? [];
+    final total = double.tryParse(widget.order['total'].toString()) ?? 0;
+    final paymentStatus = widget.order['payment_status'] ?? 'pending';
+    final payments = widget.order['payments'] as List<dynamic>? ?? [];
+    final status = widget.order['status'] ?? '';
+    final waiter = widget.order['waiter'] as Map<String, dynamic>?;
+    final cashRegister = widget.order['cash_register'] as Map<String, dynamic>?;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -567,29 +604,59 @@ class _OrderDetailsSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Orden #${order['id']}',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          // Encabezado con orden y estado
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  'Orden #${widget.order['order_number'] ?? widget.order['id']}',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+              ),
+              _buildStatusChip(paymentStatus),
+            ],
           ),
           const SizedBox(height: 8),
-          Text(
-            order['created_at'] != null
-                ? _OrderSearchScreenState._formatDateTimeStatic(DateTime.parse(order['created_at']))
-                : 'Sin fecha',
-            style: TextStyle(color: Colors.grey.shade600),
+          // Info general
+          Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            children: [
+              _buildInfoChip(
+                Icons.calendar_today,
+                widget.order['created_at'] != null
+                    ? _OrderSearchScreenState._formatDateTimeStatic(DateTime.parse(widget.order['created_at']))
+                    : 'Sin fecha',
+              ),
+              if (widget.order['table'] != null)
+                _buildInfoChip(Icons.table_bar, 'Mesa ${widget.order['table']['table_number'] ?? widget.order['table']['id']}'),
+              _buildInfoChip(
+                widget.order['table_id'] != null ? Icons.restaurant : Icons.shopping_bag,
+                widget.order['table_id'] != null ? 'En Mesa' : 'Kiosko',
+              ),
+              if (waiter != null)
+                _buildInfoChip(Icons.person, 'Mesero: ${waiter['name'] ?? 'N/A'}'),
+            ],
           ),
           const Divider(height: 24),
           Expanded(
             child: ListView(
-              controller: scrollController,
+              controller: widget.scrollController,
               children: [
+                // ─── Info de atención ───────────────────────
+                _buildServiceInfoSection(waiter, cashRegister),
+                const Divider(height: 24),
+
+                // ─── Items de la orden ──────────────────────
                 const Text(
-                  'Items',
+                  'Consumo',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-                ...details.map((item) => _buildDetailItem(item)).toList(),
+                ...details.map((item) => _buildDetailItem(item)),
                 const Divider(height: 32),
+                // Total
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -607,6 +674,92 @@ class _OrderDetailsSheet extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Pagos realizados
+                if (payments.isNotEmpty) ...[
+                  const Divider(height: 32),
+                  const Text(
+                    'Pagos Realizados',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  ...payments.map((p) => _buildPaymentItem(p)),
+                ],
+
+                // ─── Timeline de actividad ──────────────────
+                const Divider(height: 32),
+                Row(
+                  children: [
+                    const Icon(Icons.history, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Historial de Actividad',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildActivityTimeline(),
+
+                const SizedBox(height: 24),
+                // Acciones
+                if (paymentStatus == 'paid' && status != 'voided') ...[
+                  const Divider(height: 16),
+                  const Text(
+                    'Acciones',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context); // Cerrar sheet
+                        final posProvider = Provider.of<PosProvider>(context, listen: false);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RefundScreen(
+                              orderId: widget.order['id'],
+                              orderTotal: total,
+                              processedBy: posProvider.userId,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.undo, color: Colors.orange),
+                      label: const Text('Solicitar Reembolso'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange,
+                        side: const BorderSide(color: Colors.orange),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                ],
+                if (paymentStatus == 'pending') ...[
+                  const Divider(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.shade200),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.amber),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Esta orden está pendiente de pago. Regresa a la pantalla de caja para procesarla.',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
               ],
             ),
           ),
@@ -615,10 +768,408 @@ class _OrderDetailsSheet extends StatelessWidget {
     );
   }
 
+  // ─── Sección de info de servicio ─────────────────────────
+  Widget _buildServiceInfoSection(Map<String, dynamic>? waiter, Map<String, dynamic>? cashRegister) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Información de Atención',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+          ),
+          const SizedBox(height: 10),
+          _buildServiceRow(
+            Icons.storefront,
+            'Atendido en',
+            widget.order['table_id'] != null ? 'Restaurante (Mesa)' : 'Kiosko',
+          ),
+          if (waiter != null) ...[
+            const SizedBox(height: 6),
+            _buildServiceRow(Icons.person, 'Mesero', waiter['name'] ?? 'N/A'),
+          ],
+          if (cashRegister != null) ...[
+            const SizedBox(height: 6),
+            _buildServiceRow(
+              Icons.point_of_sale,
+              'Caja',
+              cashRegister['cash_register_number'] ?? 'Caja #${cashRegister['id']}',
+            ),
+          ],
+          const SizedBox(height: 6),
+          _buildServiceRow(
+            Icons.access_time,
+            'Hora de orden',
+            widget.order['created_at'] != null
+                ? _OrderSearchScreenState._formatDateTimeStatic(DateTime.parse(widget.order['created_at']))
+                : 'Sin fecha',
+          ),
+          if (widget.order['status'] != null) ...[
+            const SizedBox(height: 6),
+            _buildServiceRow(Icons.flag, 'Estado', _formatStatus(widget.order['status'])),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServiceRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.blue.shade700),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── Timeline de actividad ───────────────────────────────
+  Widget _buildActivityTimeline() {
+    if (_loadingLogs) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+
+    if (_activityLogs.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.grey, size: 18),
+            SizedBox(width: 8),
+            Text('No hay registros de actividad aún', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: _activityLogs.asMap().entries.map((entry) {
+        final index = entry.key;
+        final log = entry.value;
+        final isLast = index == _activityLogs.length - 1;
+        return _buildTimelineItem(log, isLast);
+      }).toList(),
+    );
+  }
+
+  Widget _buildTimelineItem(Map<String, dynamic> log, bool isLast) {
+    final action = log['action'] ?? '';
+    final description = log['description'] ?? '';
+    final userName = log['user_name'] ?? 'Sistema';
+    final userRole = log['user_role'] ?? '';
+    final createdAt = log['created_at'] != null
+        ? _OrderSearchScreenState._formatDateTimeStatic(DateTime.parse(log['created_at']))
+        : '';
+    final properties = log['properties'] as Map<String, dynamic>? ?? {};
+
+    final actionInfo = _getActionInfo(action);
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Línea del timeline
+          SizedBox(
+            width: 40,
+            child: Column(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: actionInfo.color,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(actionInfo.icon, size: 14, color: Colors.white),
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      color: Colors.grey.shade300,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Contenido
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          actionInfo.label,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: actionInfo.color,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        createdAt,
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.person_outline, size: 12, color: Colors.grey.shade500),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$userName${userRole.isNotEmpty ? ' ($userRole)' : ''}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                      ),
+                    ],
+                  ),
+                  // Detalles extra según la acción
+                  if (properties.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _buildPropertiesChips(action, properties),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPropertiesChips(String action, Map<String, dynamic> props) {
+    final chips = <Widget>[];
+
+    switch (action) {
+      case 'order_created':
+        if (props['source'] != null) {
+          chips.add(_propChip('Origen: ${props['source']}', Icons.location_on));
+        }
+        if (props['waiter_name'] != null) {
+          chips.add(_propChip('Mesero: ${props['waiter_name']}', Icons.person));
+        }
+        if (props['items_count'] != null) {
+          chips.add(_propChip('${props['items_count']} items', Icons.list_alt));
+        }
+        break;
+      case 'order_paid':
+        if (props['cashier_name'] != null) {
+          chips.add(_propChip('Cajero: ${props['cashier_name']}', Icons.person));
+        }
+        if (props['payment_method'] != null) {
+          chips.add(_propChip('Método: ${props['payment_method']}', Icons.payment));
+        }
+        if (props['total_paid'] != null) {
+          chips.add(_propChip('\$${double.tryParse(props['total_paid'].toString())?.toStringAsFixed(2) ?? props['total_paid']}', Icons.attach_money));
+        }
+        break;
+      case 'order_voided':
+        if (props['supervisor_name'] != null) {
+          chips.add(_propChip('Supervisor: ${props['supervisor_name']}', Icons.admin_panel_settings));
+        }
+        if (props['reason'] != null) {
+          chips.add(_propChip('Razón: ${props['reason']}', Icons.comment));
+        }
+        break;
+      case 'order_items_added':
+        if (props['items_added'] != null) {
+          chips.add(_propChip('+${props['items_added']} items', Icons.add_circle));
+        }
+        if (props['added_by'] != null) {
+          chips.add(_propChip('Por: ${props['added_by']}', Icons.person));
+        }
+        break;
+      case 'order_item_courtesy':
+        if (props['product_name'] != null) {
+          chips.add(_propChip(props['product_name'], Icons.card_giftcard));
+        }
+        if (props['reason'] != null) {
+          chips.add(_propChip('Razón: ${props['reason']}', Icons.comment));
+        }
+        break;
+      case 'order_status_changed':
+        if (props['old_status'] != null && props['new_status'] != null) {
+          chips.add(_propChip('${_formatStatus(props['old_status'])} → ${_formatStatus(props['new_status'])}', Icons.swap_horiz));
+        }
+        break;
+      case 'order_cancelled':
+        if (props['cancelled_by'] != null) {
+          chips.add(_propChip('Por: ${props['cancelled_by']}', Icons.person));
+        }
+        break;
+    }
+
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: chips,
+    );
+  }
+
+  Widget _propChip(String text, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.grey.shade600),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(text, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _ActionInfo _getActionInfo(String action) {
+    switch (action) {
+      case 'order_created':
+        return _ActionInfo('Orden Creada', Icons.add_circle, Colors.green);
+      case 'order_status_changed':
+        return _ActionInfo('Cambio de Estado', Icons.swap_horiz, Colors.blue);
+      case 'order_paid':
+        return _ActionInfo('Pago Procesado', Icons.payment, Colors.teal);
+      case 'order_items_added':
+        return _ActionInfo('Items Agregados', Icons.playlist_add, Colors.indigo);
+      case 'order_cancelled':
+        return _ActionInfo('Orden Cancelada', Icons.cancel, Colors.red);
+      case 'order_voided':
+        return _ActionInfo('Orden Anulada', Icons.block, Colors.red.shade800);
+      case 'order_item_courtesy':
+        return _ActionInfo('Cortesía', Icons.card_giftcard, Colors.purple);
+      default:
+        return _ActionInfo('Actividad', Icons.info, Colors.grey);
+    }
+  }
+
+  String _formatStatus(String status) {
+    switch (status) {
+      case 'pending': return 'Pendiente';
+      case 'confirmed': return 'Confirmado';
+      case 'preparing': return 'Preparando';
+      case 'ready': return 'Listo';
+      case 'delivered': return 'Entregado';
+      case 'cancelled': return 'Cancelado';
+      case 'voided': return 'Anulado';
+      default: return status;
+    }
+  }
+
+  Widget _buildStatusChip(String status) {
+    Color color;
+    String label;
+    switch (status) {
+      case 'paid':
+        color = Colors.green;
+        label = 'Pagado';
+        break;
+      case 'partial':
+        color = Colors.orange;
+        label = 'Parcial';
+        break;
+      default:
+        color = Colors.red;
+        label = 'Pendiente';
+    }
+    return Chip(
+      label: Text(label, style: const TextStyle(color: Colors.white, fontSize: 13)),
+      backgroundColor: color,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _buildInfoChip(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: Colors.grey),
+        const SizedBox(width: 4),
+        Text(text, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+      ],
+    );
+  }
+
+  Widget _buildPaymentItem(dynamic payment) {
+    final amount = double.tryParse(payment['amount'].toString()) ?? 0;
+    final method = payment['payment_method']?['name'] ?? 'Método desconocido';
+    final paymentStatus = payment['status'] ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            paymentStatus == 'completed' ? Icons.check_circle : Icons.pending,
+            size: 18,
+            color: paymentStatus == 'completed' ? Colors.green : Colors.grey,
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(method)),
+          Text(
+            '\$${amount.toStringAsFixed(2)}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDetailItem(Map<String, dynamic> item) {
     final quantity = item['quantity'] ?? 0;
-    final price = double.tryParse(item['price'].toString()) ?? 0;
-    final subtotal = quantity * price;
+    final product = item['product'] as Map<String, dynamic>?;
+    final price = double.tryParse(
+        (item['unit_price'] ?? item['price'] ?? product?['price'] ?? 0).toString()) ?? 0;
+    final subtotal = double.tryParse(
+        (item['subtotal'] ?? (quantity * price)).toString()) ?? (quantity * price);
+    final productName = product?['name'] ?? item['product_name'] ?? 'Item';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -644,7 +1195,7 @@ class _OrderDetailsSheet extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item['product_name'] ?? 'Item',
+                  productName,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -665,4 +1216,12 @@ class _OrderDetailsSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ActionInfo {
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  _ActionInfo(this.label, this.icon, this.color);
 }

@@ -38,7 +38,20 @@ dependencies:
   provider: ^6.1.5
   http: 1.4.0
   shared_preferences: ^2.5.3
+  flutter_secure_storage: ^9.2.2
   cached_network_image: ^3.4.1
+  
+  # Impresoras térmicas
+  esc_pos_utils: ^1.1.0
+  esc_pos_printer: ^4.1.0
+  bluetooth_print: ^4.3.0
+  print_bluetooth_thermal: ^1.1.1
+  network_info_plus: ^6.0.2  # Para obtener info de red
+  
+  # Utilidades
+  intl: ^0.19.0
+  wakelock_plus: ^1.4.0
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:

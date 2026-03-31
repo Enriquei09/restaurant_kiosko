@@ -464,6 +464,18 @@ class _AddPaymentDialogState extends State<_AddPaymentDialog> {
   final _formKey = GlobalKey<FormState>();
 
   @override
+  void initState() {
+    super.initState();
+    // Seleccionar todo el texto después de que el autofocus se aplique
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.amountController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: widget.amountController.text.length,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bool requiresReference = widget.method.name != 'Efectivo';
 
@@ -492,6 +504,7 @@ class _AddPaymentDialogState extends State<_AddPaymentDialog> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
               ],
+              autofocus: true,
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Ingrese el monto';
@@ -502,7 +515,6 @@ class _AddPaymentDialogState extends State<_AddPaymentDialog> {
                 }
                 return null;
               },
-              autofocus: true,
             ),
             if (requiresReference) ...[
               const SizedBox(height: 16),

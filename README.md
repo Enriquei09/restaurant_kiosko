@@ -2,6 +2,12 @@
 
 Aplicación Flutter multi-plataforma para el sistema de kioscos THALO. Incluye módulos de Kiosko, Caja, Cocina y Mesero.
 
+**✨ Novedades Fase 1:**
+- 🖨️ Sistema de impresión de tickets térmicos
+- 🔒 Seguridad mejorada con encriptación
+- 📊 35+ tests implementados
+- ⚡ Rate limiting en operaciones críticas
+
 ---
 
 ## 📋 Requisitos
@@ -10,6 +16,7 @@ Aplicación Flutter multi-plataforma para el sistema de kioscos THALO. Incluye m
 - Dart SDK 3.x o superior
 - Android Studio / Xcode (para apps móviles)
 - Chrome (para desarrollo web)
+- **Impresora térmica Bluetooth 80mm** (para módulo caja)
 
 ---
 
@@ -26,6 +33,14 @@ Asegúrate de que no haya errores críticos.
 cd restaurant_kiosko
 flutter pub get
 ```
+
+**Nuevas dependencias agregadas:**
+- `esc_pos_utils` - Utilidades para impresoras ESC/POS
+- `esc_pos_printer` - Driver de impresoras térmicas
+- `bluetooth_print` - Conexión Bluetooth
+- `print_bluetooth_thermal` - Impresión térmica
+- `intl` - Formateo de fechas y números
+- `pdf` - Generación de PDFs
 
 ### 3. Configurar Conexión al Backend
 
@@ -47,7 +62,28 @@ const int defaultRestaurantId = 1;
 - Para Android Emulator: `http://10.0.2.2:8000`
 - Para dispositivos físicos: IP de tu máquina (ej: `http://192.168.1.100:8000`)
 
-### 4. Ejecutar la Aplicación
+### 4. Configurar Impresora (Opcional pero Recomendado)
+
+#### a) Emparejar Impresora Bluetooth
+1. Emparejar la impresora térmica con el dispositivo Android/iOS
+2. En la app, ir a **Configuración → Impresoras**
+3. Presionar "Buscar Impresoras"
+4. Seleccionar la impresora de la lista
+5. Probar con "Imprimir Prueba"
+
+#### b) Formato de Tickets
+- **Ancho:** 80mm (estándar para restaurantes)
+- **Caracteres por línea:** 48
+- **Formato:** ESC/POS estándar
+- **Conexión:** Bluetooth (USB y Red en desarrollo)
+
+**Impresoras compatibles:**
+- Epson TM-T20
+- Star Micronics TSP143
+- Bixolon SRP-275
+- Cualquier impresora térmica ESC/POS de 80mm
+
+### 5. Ejecutar la Aplicación
 
 ```bash
 # Ver dispositivos disponibles

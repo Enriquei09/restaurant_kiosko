@@ -46,6 +46,11 @@ class RestaurantProvider extends ChangeNotifier {
       _currentRestaurantId = prefs.getInt('selected_restaurant_id');
       _currentTenantId = prefs.getInt('selected_tenant_id');
 
+      // Sincronizar con ApiService para que todas las requests usen X-Restaurant-Id
+      if (_currentRestaurantId != null) {
+        ApiService.setRestaurantId(_currentRestaurantId!);
+      }
+
       if (_currentRestaurantId != null && _currentTenantId != null) {
         await loadRestaurantData();
       }
@@ -61,6 +66,9 @@ class RestaurantProvider extends ChangeNotifier {
     try {
       _currentRestaurantId = restaurantId;
       _currentTenantId = tenantId;
+      
+      // Sincronizar con ApiService para que todas las requests usen X-Restaurant-Id
+      ApiService.setRestaurantId(restaurantId);
 
       debugPrint('Getting SharedPreferences...');
       final prefs = await SharedPreferences.getInstance();

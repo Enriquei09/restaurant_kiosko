@@ -16,6 +16,13 @@ class PinEntryScreen extends StatefulWidget {
 }
 
 class _PinEntryScreenState extends State<PinEntryScreen> {
+  // ── Constantes de diseño ──────────────────────────────────
+  static const _kBg      = Color(0xFFF5F5F5);
+  static const _kPink    = Color(0xFFE91E63);
+  static const _kDark    = Color(0xFF212121);
+  static const _kSub     = Color(0xFF757575);
+  static const _kEmerald = Color(0xFF2E7D32);
+
   String pin = '';
   bool isLoading = false;
   String errorMessage = '';
@@ -138,7 +145,7 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
         restaurantId: posProvider.restaurantId,
         locationId: posProvider.locationId,
         userId: posProvider.userId,
-        terminalId: terminalData['id'],
+        terminalId: terminalData['id'] as int,
         openingBalance: openingBalance,
         openingNotes: 'Apertura automática desde terminal ${widget.terminal.terminalNumber}',
       );
@@ -170,24 +177,61 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
   }
 
   Future<double?> _showOpeningBalanceDialog() async {
-    final controller = TextEditingController(text: '0.00');
+    final controller = TextEditingController();
     return showDialog<double>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: Text('Balance Inicial - ${widget.terminal.name}'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _kEmerald.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.account_balance_wallet_outlined,
+                  size: 22, color: _kEmerald),
+            ),
+            const SizedBox(width: 12),
+            const Text('Balance Inicial',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Inter',
+                    color: _kDark)),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Ingresa el balance inicial de la caja:'),
+            Text(widget.terminal.name,
+                style: const TextStyle(
+                    fontSize: 13, color: _kSub, fontFamily: 'Inter')),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Balance inicial',
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  fontFamily: 'Inter'),
+              decoration: InputDecoration(
+                labelText: 'Monto',
+                hintText: '0.00',
                 prefixText: '\$ ',
-                border: OutlineInputBorder(),
+                prefixStyle: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: _kDark),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _kPink, width: 2),
+                ),
               ),
               autofocus: true,
             ),
@@ -196,16 +240,33 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(null),
-            child: const Text('Cancelar'),
+            child: const Text('Cancelar',
+                style: TextStyle(
+                    color: _kSub,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter')),
           ),
           ElevatedButton(
             onPressed: () {
-              final balance = double.tryParse(controller.text);
+              final text =
+                  controller.text.isEmpty ? '0' : controller.text;
+              final balance = double.tryParse(text);
               if (balance != null && balance >= 0) {
                 Navigator.of(context).pop(balance);
               }
             },
-            child: const Text('Abrir Caja'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kPink,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text('Abrir Caja',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700, fontFamily: 'Inter')),
           ),
         ],
       ),
@@ -215,138 +276,252 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('PIN - ${widget.terminal.name}'),
-        backgroundColor: Colors.blue.shade900,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.blue.shade900,
-              Colors.blue.shade700,
-              Colors.blue.shade500,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildTerminalInfo(),
-                const SizedBox(height: 40),
-                _buildPinDisplay(),
-                if (errorMessage.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    errorMessage,
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
+      backgroundColor: _kBg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Header blanco ──
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
                   ),
                 ],
-                const SizedBox(height: 40),
-                _buildKeypad(),
-                const SizedBox(height: 24),
-                _buildActionButtons(),
-              ],
+              ),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: () => Navigator.of(context).pop(),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.arrow_back_rounded,
+                          size: 20, color: _kSub),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Text(
+                    'Autenticación de Terminal',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: _kDark,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+
+            // ── Body ──
+            Expanded(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(32),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 380),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildTerminalInfo(),
+                        const SizedBox(height: 32),
+                        _buildPinDisplay(),
+                        if (errorMessage.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFEBEE),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.error_outline_rounded,
+                                    size: 18, color: Colors.red.shade600),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    errorMessage,
+                                    style: TextStyle(
+                                      color: Colors.red.shade700,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      fontFamily: 'Inter',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 28),
+                        _buildKeypad(),
+                        const SizedBox(height: 24),
+                        _buildActionButtons(),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildTerminalInfo() {
-    return Card(
-      elevation: 8,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.green.shade400, Colors.green.shade600],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: const Border(
+          left: BorderSide(color: _kEmerald, width: 5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              Icons.point_of_sale,
-              size: 48,
-              color: Colors.white,
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: _kEmerald.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(14),
             ),
-            const SizedBox(height: 12),
-            Text(
-              widget.terminal.terminalNumber,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              widget.terminal.name,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-              ),
-            ),
-            if (widget.terminal.location?.isNotEmpty == true)
-              Text(
-                widget.terminal.location!,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
+            child: const Icon(Icons.point_of_sale_outlined,
+                size: 28, color: _kEmerald),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.terminal.terminalNumber,
+                  style: const TextStyle(
+                    color: _kDark,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Inter',
+                  ),
                 ),
-              ),
-          ],
-        ),
+                const SizedBox(height: 2),
+                Text(
+                  widget.terminal.name,
+                  style: const TextStyle(
+                    color: _kSub,
+                    fontSize: 14,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+                if (widget.terminal.location?.isNotEmpty == true)
+                  Text(
+                    widget.terminal.location!,
+                    style: const TextStyle(
+                      color: _kSub,
+                      fontSize: 12,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildPinDisplay() {
-    return Card(
-      elevation: 4,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Text(
-                obscurePin ? '•' * pin.length : pin,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 8,
-                ),
-                textAlign: TextAlign.center,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Expanded(
+            child: pin.isEmpty
+                ? Text(
+                    'Ingresa tu PIN',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey.shade400,
+                      fontFamily: 'Inter',
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(pin.length, (i) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: obscurePin
+                            ? Container(
+                                width: 16,
+                                height: 16,
+                                decoration: const BoxDecoration(
+                                  color: _kPink,
+                                  shape: BoxShape.circle,
+                                ),
+                              )
+                            : Text(
+                                pin[i],
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800,
+                                  color: _kDark,
+                                  fontFamily: 'Inter',
+                                ),
+                              ),
+                      );
+                    }),
+                  ),
+          ),
+          InkWell(
+            onTap: _togglePinVisibility,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                obscurePin
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                color: _kSub,
+                size: 20,
               ),
             ),
-            IconButton(
-              onPressed: _togglePinVisibility,
-              icon: Icon(
-                obscurePin ? Icons.visibility : Icons.visibility_off,
-                color: Colors.grey.shade600,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -358,14 +533,20 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
         shrinkWrap: true,
         crossAxisCount: 3,
         childAspectRatio: 1.2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
         physics: const NeverScrollableScrollPhysics(),
         children: [
           for (int i = 1; i <= 9; i++) _buildKeypadButton(i.toString()),
-          _buildKeypadButton('C', onPressed: _clearPin, color: Colors.orange),
+          _buildKeypadButton('C',
+              onPressed: _clearPin,
+              bgColor: const Color(0xFFFFF3E0),
+              fgColor: Colors.orange.shade800),
           _buildKeypadButton('0'),
-          _buildKeypadButton('←', onPressed: _removeDigit, color: Colors.red),
+          _buildKeypadButton('←',
+              onPressed: _removeDigit,
+              bgColor: const Color(0xFFFFEBEE),
+              fgColor: Colors.red.shade600),
         ],
       ),
     );
@@ -374,23 +555,31 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
   Widget _buildKeypadButton(
     String text, {
     VoidCallback? onPressed,
-    Color? color,
+    Color? bgColor,
+    Color? fgColor,
   }) {
-    return ElevatedButton(
-      onPressed: onPressed ?? () => _addDigit(text),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color ?? Colors.white,
-        foregroundColor: color != null ? Colors.white : Colors.blue.shade900,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        elevation: 4,
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
+    return Material(
+      color: bgColor ?? Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      elevation: 0,
+      child: InkWell(
+        onTap: onPressed ?? () => _addDigit(text),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: fgColor ?? _kDark,
+              fontFamily: 'Inter',
+            ),
+          ),
         ),
       ),
     );
@@ -403,27 +592,32 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
           child: OutlinedButton(
             onPressed: isLoading ? null : () => Navigator.of(context).pop(),
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white),
+              foregroundColor: _kSub,
+              side: BorderSide(color: Colors.grey.shade300),
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+                  borderRadius: BorderRadius.circular(12)),
+              backgroundColor: Colors.white,
             ),
-            child: const Text('Cancelar'),
+            child: const Text('Cancelar',
+                style: TextStyle(
+                    fontWeight: FontWeight.w600, fontFamily: 'Inter')),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 14),
         Expanded(
+          flex: 2,
           child: ElevatedButton(
             onPressed: isLoading || pin.isEmpty ? null : _authenticatePin,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: _kPink,
               foregroundColor: Colors.white,
+              disabledBackgroundColor: _kPink.withOpacity(0.4),
+              disabledForegroundColor: Colors.white70,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+                  borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
             ),
             child: isLoading
                 ? const SizedBox(
@@ -431,10 +625,15 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
-                : const Text('Acceder'),
+                : const Text('Acceder',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Inter')),
           ),
         ),
       ],

@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/models/kitchen_order.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/service/configuration_service.dart';
+import 'package:restaurant_kiosco/providers/auth_provider.dart';
 
 class RunnerScreen extends StatefulWidget {
   const RunnerScreen({super.key});
@@ -83,6 +85,42 @@ class _RunnerScreenState extends State<RunnerScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadOrders),
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'logout') {
+                final auth = context.read<AuthProvider>();
+                await auth.logout();
+                if (context.mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    '/login',
+                    (route) => false,
+                  );
+                }
+              }
+            },
+            offset: const Offset(0, 50),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout_rounded, size: 20, color: Color(0xFFE91E63)),
+                    SizedBox(width: 12),
+                    Text('Salir'),
+                  ],
+                ),
+              ),
+            ],
+            child: const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: Color(0xFFE91E63),
+                child: Icon(Icons.delivery_dining, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: isLoading
