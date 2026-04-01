@@ -48,6 +48,23 @@ class KitchenOrder {
     );
   }
 
+  KitchenOrder copyWith({String? status}) {
+    return KitchenOrder(
+      id: id,
+      orderNumber: orderNumber,
+      status: status ?? this.status,
+      paymentStatus: paymentStatus,
+      clientName: clientName,
+      clientPhone: clientPhone,
+      total: total,
+      tip: tip,
+      createdAt: createdAt,
+      items: items,
+      tableName: tableName,
+      tableNumber: tableNumber,
+    );
+  }
+
   // Helper para obtener color según status (Legacy)
   String get statusLabel {
     switch (status) {

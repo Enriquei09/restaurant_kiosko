@@ -123,7 +123,7 @@ class _SplitPaymentScreenState extends State<SplitPaymentScreen> {
       if (response['success'] == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Pago procesado exitosamente'),
+            content: Text('Pago realizado con éxito'),
             backgroundColor: Colors.green,
           ),
         );

@@ -11,6 +11,8 @@ import '../order_search_screen.dart';
 import '../split_payment_screen.dart';
 import '../refund_screen.dart';
 import '../../widgets/discount_dialog.dart';
+import '../pos/direct_sales_screen.dart';
+import '../../../service/reverb_service.dart';
 
 class CashierScreen extends StatefulWidget {
   const CashierScreen({super.key});
@@ -28,6 +30,7 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
   DateTime? _cashRegisterOpenedAt;
   late TabController _tabController;
   bool _showOldOrders = true; // Mostrar u ocultar órdenes antiguas
+  ReverbService? _reverb;
   
   // Listas separadas por tipo
   List<KitchenOrder> get tableOrders => _filterOrders(orders.where((o) => o.tableNumber != null).toList());
@@ -52,6 +55,7 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
     _tabController = TabController(length: 2, vsync: this);
     _loadCurrentCashRegister();
     _loadOrders();
+    _initWebSocket();
     // Polling cada 5 segundos para que sea rápido
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadOrders());
   }
@@ -60,7 +64,55 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
   void dispose() {
     _pollTimer?.cancel();
     _tabController.dispose();
+    _reverb?.dispose();
     super.dispose();
+  }
+
+  /// Inicializar WebSocket para escuchar eventos en tiempo real
+  Future<void> _initWebSocket() async {
+    try {
+      final auth = context.read<AuthProvider>();
+      final token = auth.token;
+      if (token == null || token.isEmpty) return;
+
+      final restaurantId = await ConfigurationService.getRestaurantId();
+
+      _reverb = ReverbService(
+        token: token,
+        restaurantId: restaurantId,
+        onConnected: () {
+          if (mounted) debugPrint('[Cashier] WebSocket conectado');
+        },
+        onDisconnected: () {
+          if (mounted) debugPrint('[Cashier] WebSocket desconectado');
+        },
+        onEvent: _handleReverbEvent,
+        onError: (err) {
+          debugPrint('[Cashier] WebSocket error: $err');
+        },
+      );
+
+      await _reverb!.connect();
+    } catch (e) {
+      debugPrint('[Cashier] Error inicializando WebSocket: $e');
+    }
+  }
+
+  /// Manejar eventos que llegan por WebSocket
+  void _handleReverbEvent(String event, Map<String, dynamic> data) {
+    if (!mounted) return;
+
+    debugPrint('[Cashier] Evento recibido: $event');
+
+    // Recargar órdenes si llega un evento importante
+    if (event == 'OrderCreated' ||
+        event == '.OrderCreated' ||
+        event == 'OrderStatusChanged' ||
+        event == '.OrderStatusChanged' ||
+        event == 'OrderPaid' ||
+        event == '.OrderPaid') {
+      _loadOrders();
+    }
   }
 
   Future<void> _loadCurrentCashRegister() async {
@@ -447,6 +499,21 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const DirectSalesScreen()),
+          );
+        },
+        backgroundColor: const Color(0xFFE91E63),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.receipt_long),
+        label: const Text(
+          'Nueva Venta',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
     );
   }
 
@@ -660,7 +727,9 @@ class _CashierScreenState extends State<CashierScreen> with SingleTickerProvider
           orderTotal: order.total,
           cashRegisterId: context.read<PosProvider>().currentCashRegister?.id ?? 0,
           onPaymentComplete: () {
-            _loadOrders();
+            setState(() {
+              orders.removeWhere((o) => o.id == order.id);
+            });
           },
         ),
       ),

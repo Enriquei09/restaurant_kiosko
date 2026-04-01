@@ -23,6 +23,7 @@ import 'package:restaurant_kiosco/presentation/screens/kiosk/kiosk_screen_wrappe
 import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/runner/runner_screen.dart';
 import 'package:restaurant_kiosco/presentation/screens/auth/login_screen.dart';
+import 'package:restaurant_kiosco/presentation/screens/pos/direct_sales_screen.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Helper classes para verificación de roles
@@ -221,6 +222,7 @@ class MyApp extends StatelessWidget {
             '/kiosk/table-input': (context) => const KioskScreenWrapper(child: TableInputScreen()),
             '/kiosk/table-selection': (context) => const KioskScreenWrapper(child: KioskTableSelectionScreen()),
             '/checkout': (context) => const CheckoutScreen(),
+            '/pos/nueva-venta': (context) => const DirectSalesScreen(),
           },
         );
       },

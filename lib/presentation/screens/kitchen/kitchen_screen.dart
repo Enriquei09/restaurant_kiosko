@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -28,10 +29,18 @@ class _KitchenScreenState extends State<KitchenScreen>
   int _secondsSinceSync = 0;
   String selectedTab = 'active';
 
+  // ── Completados en sesión y control de animación ──
+  List<KitchenOrder> completedOrders = [];
+  Map<int, Timer> _orderTimers = {};
+  final Set<int> _exitingOrderIds = {};
+
   // ── WebSocket (Reverb) ──
   ReverbService? _reverb;
   bool _wsConnected = false;
   String _syncLabel = 'Conectando…';
+
+  // ── Sonido de notificación ──
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   // ── Animación para nuevas órdenes ──
   // IDs de órdenes que acaban de llegar por WS para marcar animación
@@ -41,6 +50,8 @@ class _KitchenScreenState extends State<KitchenScreen>
   void initState() {
     super.initState();
     WakelockPlus.enable();
+    // Pre-cargar el sonido para reproducción sin latencia
+    _audioPlayer.setSource(AssetSource('sounds/new_order.wav'));
     _loadOrders();
     _initWebSocket();
     // Polling como fallback (cada 15s en vez de 10 ya que WS es primario)
@@ -63,7 +74,33 @@ class _KitchenScreenState extends State<KitchenScreen>
     _pollTimer?.cancel();
     _elapsedTimer?.cancel();
     _syncTimer?.cancel();
+    for (final t in _orderTimers.values) t.cancel();
+    _orderTimers.clear();
+    _audioPlayer.dispose();
     super.dispose();
+  }
+
+  /// Inicia un timer por orden para refrescar los minutos transcurridos cada minuto
+  void _startOrderTimers(List<KitchenOrder> newOrders) {
+    for (final o in newOrders) {
+      _orderTimers.putIfAbsent(
+        o.id,
+        () => Timer.periodic(
+          const Duration(minutes: 1),
+          (_) { if (mounted) setState(() {}); },
+        ),
+      );
+    }
+  }
+
+  /// Reproducir sonido de notificación de nueva orden
+  Future<void> _playNotificationSound() async {
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.play(AssetSource('sounds/new_order.wav'));
+    } catch (e) {
+      debugPrint('[KDS] Error reproduciendo sonido: $e');
+    }
   }
 
   // ── Iniciar conexión WebSocket a Reverb ──
@@ -102,40 +139,58 @@ class _KitchenScreenState extends State<KitchenScreen>
   void _handleReverbEvent(String event, Map<String, dynamic> data) {
     if (!mounted) return;
 
-    if (event == 'OrderCreated' || event == '.OrderCreated') {
-      final orderData = data['order'] as Map<String, dynamic>?;
-      if (orderData == null) return;
+    final isOrderCreated = event == 'OrderCreated' || event == '.OrderCreated';
+    final isOrderReadyForKitchen =
+        event == 'OrderReadyForKitchen' || event == '.OrderReadyForKitchen';
 
-      // Solo nos interesan órdenes activas (confirmed/preparing) en el tab activo
-      final status = orderData['status'] as String? ?? '';
-      if (selectedTab == 'active' &&
-          (status == 'confirmed' || status == 'preparing')) {
-        // Construir KitchenOrder desde el payload del evento
-        final newOrder = KitchenOrder.fromJson({
-          ...orderData,
-          'order_details': orderData['items'] ?? [],
-        });
+    if (!isOrderCreated && !isOrderReadyForKitchen) return;
 
-        // Evitar duplicados
-        if (orders.any((o) => o.id == newOrder.id)) return;
+    final orderData = data['order'] as Map<String, dynamic>?;
+    if (orderData == null) return;
 
-        setState(() {
-          orders.insert(0, newOrder);
-          _freshOrderIds.add(newOrder.id);
-          // Actualizar conteos
-          counts[status] = (counts[status] ?? 0) + 1;
-          _secondsSinceSync = 0;
-          _syncLabel = 'Recién';
-        });
+    final status = orderData['status'] as String? ?? 'confirmed';
 
-        // Limpiar marca de "nuevo" después de la animación
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) setState(() => _freshOrderIds.remove(newOrder.id));
-        });
-      } else {
-        // Si no es el tab activo, simplemente recargar
-        _loadOrders();
-      }
+    if (selectedTab == 'active' &&
+        (status == 'confirmed' || status == 'preparing')) {
+      // Normalizar los items del evento al formato que espera KitchenOrder.fromJson
+      // El evento envía 'items' con {product_name, quantity, ...}
+      // KitchenOrder espera 'order_details' con {product: {name}, quantity, ...}
+      final rawItems = (orderData['items'] as List?) ?? [];
+      final normalizedItems = rawItems.map((item) => {
+        'id': item['id'] ?? 0,
+        'product': {'name': item['product_name'] ?? 'Producto'},
+        'quantity': item['quantity'] ?? 1,
+        'unit_price': item['unit_price'] ?? 0,
+        'notes': item['notes'],
+        'modifiers': item['modifiers'] ?? [],
+      }).toList();
+
+      final newOrder = KitchenOrder.fromJson({
+        ...orderData,
+        'order_details': normalizedItems,
+      });
+
+      // Evitar duplicados
+      if (orders.any((o) => o.id == newOrder.id)) return;
+
+      // Reproducir sonido y agregar al inicio de la lista
+      _playNotificationSound();
+
+      setState(() {
+        orders.insert(0, newOrder);
+        _freshOrderIds.add(newOrder.id);
+        counts[status] = (counts[status] ?? 0) + 1;
+        _secondsSinceSync = 0;
+        _syncLabel = 'Recién';
+      });
+      _startOrderTimers([newOrder]);
+
+      // Limpiar marca de "nuevo" después de que termine la animación
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _freshOrderIds.remove(newOrder.id));
+      });
+    } else {
+      _loadOrders();
     }
   }
 
@@ -154,7 +209,16 @@ class _KitchenScreenState extends State<KitchenScreen>
 
       if (mounted) {
         setState(() {
-          orders = response.orders;
+          if (selectedTab == 'active') {
+            orders = response.orders;
+            _startOrderTimers(orders);
+          } else {
+            // Mezclar completados de sesión con los de la API (sin duplicados)
+            final apiIds = response.orders.map((o) => o.id).toSet();
+            final sessionOnly =
+                completedOrders.where((o) => !apiIds.contains(o.id)).toList();
+            completedOrders = [...sessionOnly, ...response.orders];
+          }
           counts = response.counts;
           isLoading = false;
           error = null;
@@ -171,33 +235,66 @@ class _KitchenScreenState extends State<KitchenScreen>
     }
   }
   
-   Future<void> _advanceOrder(int orderId) async {
-      // Move to next state: confirmed → preparing → ready
-      try {
-        // Find the current order's status to determine next state
-        final currentOrder = orders.firstWhere(
-          (o) => o.id == orderId,
-          orElse: () => orders.first,
-        );
-        
-        String nextStatus;
-        if (currentOrder.status == 'confirmed') {
-          nextStatus = 'preparing';
-        } else if (currentOrder.status == 'preparing') {
-          nextStatus = 'ready';
-        } else {
-          nextStatus = 'ready'; // fallback
-        }
-        
-        await ApiService.updateOrderStatus(orderId: orderId, status: nextStatus);
-        _loadOrders();
-      } catch (e) {
+  Future<void> _advanceOrder(int orderId) async {
+    final currentOrder = orders.firstWhere(
+      (o) => o.id == orderId,
+      orElse: () => orders.first,
+    );
+    final nextStatus =
+        currentOrder.status == 'confirmed' ? 'preparing' : 'ready';
+
+    try {
+      await ApiService.updateOrderStatus(orderId: orderId, status: nextStatus);
+
+      // 1. Cancelar el temporizador interno de esta orden
+      _orderTimers[orderId]?.cancel();
+      _orderTimers.remove(orderId);
+
+      if (nextStatus == 'ready') {
+        // 2. Iniciar animación de salida
+        if (mounted) setState(() => _exitingOrderIds.add(orderId));
+
+        // 3. Esperar a que la animación de salida termine (400ms)
+        await Future.delayed(const Duration(milliseconds: 420));
+
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
-          );
+          setState(() {
+            final idx = orders.indexWhere((o) => o.id == orderId);
+            if (idx != -1) {
+              // 4. Mover a la lista de completados con status 'ready'
+              completedOrders.insert(
+                  0, orders[idx].copyWith(status: 'ready'));
+              orders.removeAt(idx);
+              _exitingOrderIds.remove(orderId);
+              // 5. Actualizar contadores localmente
+              if ((counts[currentOrder.status] ?? 0) > 0) {
+                counts[currentOrder.status] =
+                    counts[currentOrder.status]! - 1;
+              }
+              counts['ready'] = (counts['ready'] ?? 0) + 1;
+            }
+          });
+        }
+      } else {
+        // confirmed → preparing: actualizar estado local sin recargar
+        if (mounted) {
+          setState(() {
+            final idx = orders.indexWhere((o) => o.id == orderId);
+            if (idx != -1) {
+              orders[idx] = orders[idx].copyWith(status: 'preparing');
+              counts['confirmed'] = (counts['confirmed'] ?? 1) - 1;
+              counts['preparing'] = (counts['preparing'] ?? 0) + 1;
+            }
+          });
         }
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -450,6 +547,11 @@ class _KitchenScreenState extends State<KitchenScreen>
                                   : 200.0; // Móvil → 2 cols
                           final aspect = w >= 800 ? 0.55 : 0.50;
 
+                          // Lista activa o completada según tab seleccionado
+                          final displayOrders = selectedTab == 'active'
+                              ? orders
+                              : completedOrders;
+
                           return Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: GridView.builder(
@@ -460,32 +562,61 @@ class _KitchenScreenState extends State<KitchenScreen>
                                 crossAxisSpacing: 14,
                                 mainAxisSpacing: 14,
                               ),
-                              itemCount: orders.length,
+                              itemCount: displayOrders.length,
                               itemBuilder: (context, index) {
-                            final order = orders[index];
+                            final order = displayOrders[index];
                             final isFresh = _freshOrderIds.contains(order.id);
-                            return AnimatedScale(
-                              scale: isFresh ? 1.0 : 1.0,
-                              duration: const Duration(milliseconds: 400),
+                            final isExiting = _exitingOrderIds.contains(order.id);
+                            return TweenAnimationBuilder<double>(
+                              key: ValueKey(
+                                'order_${order.id}_${isExiting ? 'exit' : isFresh ? 'enter' : 'idle'}',
+                              ),
+                              tween: Tween(
+                                begin: isExiting ? 1.0 : (isFresh ? 0.0 : 1.0),
+                                end: isExiting ? 0.0 : 1.0,
+                              ),
+                              duration: Duration(
+                                  milliseconds: isExiting ? 400 : 550),
+                              curve: isExiting
+                                  ? Curves.easeInBack
+                                  : Curves.easeOutBack,
+                              builder: (ctx, v, child) {
+                                return Opacity(
+                                  opacity: v.clamp(0.0, 1.0),
+                                  child: Transform.translate(
+                                    offset: isExiting
+                                        ? Offset((1.0 - v) * 60, 0)
+                                        : Offset(0, (1.0 - v) * -36),
+                                    child: Transform.scale(
+                                      scale: isExiting
+                                          ? (0.8 + v * 0.2)
+                                          : (0.85 + v * 0.15),
+                                      child: child,
+                                    ),
+                                  ),
+                                );
+                              },
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 600),
-                                curve: Curves.easeOutBack,
+                                curve: Curves.easeOut,
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: isFresh
                                       ? [
                                           BoxShadow(
                                             color: const Color(0xFFE91E63)
-                                                .withValues(alpha: 0.35),
-                                            blurRadius: 18,
-                                            spreadRadius: 2,
+                                                .withOpacity(0.40),
+                                            blurRadius: 22,
+                                            spreadRadius: 3,
                                           ),
                                         ]
                                       : [],
                                 ),
                                 child: KitchenOrderCard(
                                   order: order,
-                                  onAdvance: () => _advanceOrder(order.id),
+                                  onAdvance: selectedTab == 'active'
+                                      ? () => _advanceOrder(order.id)
+                                      : null,
                                 ),
                               ),
                             );
@@ -651,12 +782,12 @@ class _KitchenScreenState extends State<KitchenScreen>
 
 class KitchenOrderCard extends StatelessWidget {
   final KitchenOrder order;
-  final VoidCallback onAdvance;
+  final VoidCallback? onAdvance;
 
   const KitchenOrderCard({
     super.key,
     required this.order,
-    required this.onAdvance,
+    this.onAdvance,
   });
 
   /// Color de urgencia según tiempo transcurrido (semáforo de cocina)
@@ -890,10 +1021,11 @@ class KitchenOrderCard extends StatelessWidget {
           ),
 
           // ── Botón LISTO (Rosa Mexicano, full-width) ──
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onAdvance,
+          if (onAdvance != null)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onAdvance,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE91E63),
                 foregroundColor: Colors.white,
