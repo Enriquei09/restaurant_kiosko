@@ -15,7 +15,11 @@ class LargeButton extends StatelessWidget {
   final String? imagePath;
   final int qty;
   final bool openCartAfterAdd;
-   final bool closeCurrentDialog; 
+  final bool closeCurrentDialog;
+  final String? buttonText;
+  final Color backgroundColor;
+  final double minHeight;
+  final double fontSize;
 
   const LargeButton({
     super.key,
@@ -29,6 +33,10 @@ class LargeButton extends StatelessWidget {
     this.qty = 1,
     this.openCartAfterAdd = true,
     this.closeCurrentDialog = false,
+    this.buttonText,
+    this.backgroundColor = const Color(0xFFE91E63),
+    this.minHeight = 60,
+    this.fontSize = 22,
   });
 
   @override
@@ -57,22 +65,23 @@ class LargeButton extends StatelessWidget {
         }
           // 3) Feedback y/o abrir modal
           if (openCartAfterAdd && context.mounted) {
-            showDialog(
-              context: context,
-              barrierDismissible: true,
-              builder: (_) => const ProductsSelected(), // lee del Provider
-            );
+            ProductsSelected.show(context);
           } else if (context.mounted) {
             ScaffoldMessenger.of(context)
                 .showSnackBar(const SnackBar(content: Text('Producto agregado')));
           }
         },
         style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 80),
-          backgroundColor: const Color.fromARGB(255, 10, 10, 10),
+          minimumSize: Size(double.infinity, minHeight),
+          backgroundColor: backgroundColor,
           foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
-        child: const Text('Agregar al carrito'),
+        child: Text(
+          buttonText ?? 'Agregar al carrito',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w800),
+        ),
       ),
     );
   }

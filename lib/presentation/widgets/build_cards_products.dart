@@ -11,38 +11,38 @@ class BuildCardsProducts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(50.0),
+      padding: const EdgeInsets.all(16),
       alignment: Alignment.centerLeft,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [          
           Container(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.fromLTRB(0, 6, 0, 12),
             alignment: Alignment.centerLeft,
             child: Text(
               textAlign: TextAlign.start,
               category,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
                 fontSize: 24,
                 color: Colors.black,
               ),
             ),
           ),
-          SizedBox(
-            height: 200,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: products.map((product){
-                return CardProduct(
-                  product: product,
-
-                );
-
-              }
-              ).toList(),
-            )
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisExtent: 260,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+            ),
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              return CardProduct(product: products[index]);
+            },
           ),
-          
         ],
       ),
     );

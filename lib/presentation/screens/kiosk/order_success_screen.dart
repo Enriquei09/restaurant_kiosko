@@ -1,51 +1,65 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-class OrderSuccessScreen extends StatefulWidget {
+class SuccessOrderScreen extends StatefulWidget {
   final int orderId;
-  final String orderType; // 'Comer Aquí' o 'Para Llevar'
-  final bool payAtCounter;
 
-  const OrderSuccessScreen({
+  const SuccessOrderScreen({
     super.key,
     required this.orderId,
-    required this.orderType,
-    this.payAtCounter = true,
   });
 
   @override
-  State<OrderSuccessScreen> createState() => _OrderSuccessScreenState();
+  State<SuccessOrderScreen> createState() => _SuccessOrderScreenState();
 }
 
-class _OrderSuccessScreenState extends State<OrderSuccessScreen> {
+class _SuccessOrderScreenState extends State<SuccessOrderScreen>
+    with SingleTickerProviderStateMixin {
+  static const Color _brandPink = Color(0xFFE4007C);
+
   int _secondsRemaining = 10;
-  Timer? _timer;
+  Timer? _countdownTimer;
+  Timer? _autoResetTimer;
+  late final AnimationController _checkController;
+  late final Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
+    _checkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+
+    _scaleAnimation = Tween<double>(begin: 0.92, end: 1.0).animate(
+      CurvedAnimation(parent: _checkController, curve: Curves.easeInOut),
+    );
+
     _startTimer();
   }
 
   void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining > 0) {
         setState(() {
           _secondsRemaining--;
         });
-      } else {
-        _returnToHome();
       }
     });
+
+    _autoResetTimer = Timer(const Duration(seconds: 10), _returnToHome);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _countdownTimer?.cancel();
+    _autoResetTimer?.cancel();
+    _checkController.dispose();
     super.dispose();
   }
 
   void _returnToHome() {
+    if (!mounted) return;
     // Pop until the first route (Home or Restaurant Selection)
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
@@ -53,99 +67,107 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFFDF9FC),
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.check_circle_outline,
-                color: Colors.green,
-                size: 120,
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: Container(
+                  width: 170,
+                  height: 170,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _brandPink.withOpacity(0.12),
+                    border: Border.all(
+                      color: _brandPink.withOpacity(0.35),
+                      width: 3,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    color: _brandPink,
+                    size: 110,
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
+
               const Text(
-                '¡Orden Recibida!',
-                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                '¡Tu orden se ha enviado a cocina!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 36,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF251A2C),
+                ),
               ),
-              const SizedBox(height: 48),
-              
+
+              const SizedBox(height: 36),
+
               const Text(
-                'TU NÚMERO DE ORDEN ES:',
-                style: TextStyle(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold),
+                'NÚMERO DE ORDEN',
+                style: TextStyle(
+                  fontSize: 16,
+                  letterSpacing: 1.4,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+
               Text(
                 '#${widget.orderId}',
                 style: const TextStyle(
-                  fontSize: 120,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1B0D3A),
+                  fontSize: 104,
+                  height: 1,
+                  fontWeight: FontWeight.w800,
+                  color: _brandPink,
                 ),
               ),
-              
-              const SizedBox(height: 48),
-              
+
+              const SizedBox(height: 24),
+
               Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.orange.shade200),
+                  border: Border.all(color: Colors.black.withOpacity(0.08)),
                 ),
-                child: Column(
-                  children: [
-                    if (widget.payAtCounter) ...[
-                      const Icon(Icons.payment, size: 48, color: Colors.orange),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Por favor, pasa a CAJA para realizar tu pago.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Menciona tu número de orden al cajero.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 18, color: Colors.black54),
-                      ),
-                    ] else ...[
-                      const Icon(Icons.timer, size: 48, color: Colors.blue),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Tu orden se está preparando.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Espera a que te llamen por tu número #${widget.orderId}.',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 18, color: Colors.black54),
-                      ),
-                    ],
-                  ],
+                child: const Text(
+                  'Mantente atento a las pantallas para recoger tu pedido.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 24,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF2E2A31),
+                  ),
                 ),
               ),
-              
+
               const Spacer(),
-              
+
               SizedBox(
                 width: double.infinity,
                 height: 60,
                 child: ElevatedButton(
                   onPressed: _returnToHome,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B0D3A),
+                    backgroundColor: _brandPink,
                     foregroundColor: Colors.white,
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   child: Text(
-                    'Finalizar ($_secondsRemaining)',
+                    'Volver al inicio ($_secondsRemaining)',
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -156,4 +178,13 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen> {
       ),
     );
   }
+}
+
+class OrderSuccessScreen extends SuccessOrderScreen {
+  const OrderSuccessScreen({
+    super.key,
+    required int orderId,
+    String? orderType,
+    bool payAtCounter = true,
+  }) : super(orderId: orderId);
 }

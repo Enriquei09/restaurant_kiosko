@@ -7,6 +7,8 @@ import 'package:restaurant_kiosco/presentation/pages/payment/payment_screen.dart
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart' as provider;
 
+const Color _mexicanPink = Color(0xFFE4007C);
+
 class PaymentMethodCard extends StatefulWidget {
   const PaymentMethodCard({super.key});
 
@@ -17,6 +19,25 @@ class PaymentMethodCard extends StatefulWidget {
 class _PaymentMethodCardState extends State<PaymentMethodCard> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+
+  InputDecoration _inputDecoration({required String label, required String hint}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      isDense: true,
+      filled: true,
+      fillColor: Colors.grey.shade100,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.transparent),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _mexicanPink, width: 2),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -56,11 +77,9 @@ class _PaymentMethodCardState extends State<PaymentMethodCard> {
               children: [
                 TextField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre',
-                    hintText: 'Ej: Juan Pérez',
-                    border: OutlineInputBorder(),
-                    isDense: true,
+                  decoration: _inputDecoration(
+                    label: 'Nombre',
+                    hint: 'Ej: Juan Pérez',
                   ),
                   onChanged: (value) {
                     context.read<PaymentModel>().setClientName(value.isEmpty ? null : value);
@@ -70,11 +89,9 @@ class _PaymentMethodCardState extends State<PaymentMethodCard> {
                 TextField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Teléfono',
-                    hintText: 'Ej: 5551234567',
-                    border: OutlineInputBorder(),
-                    isDense: true,
+                  decoration: _inputDecoration(
+                    label: 'Teléfono',
+                    hint: 'Ej: 5551234567',
                   ),
                   onChanged: (value) {
                     context.read<PaymentModel>().setClientPhone(value.isEmpty ? null : value);
@@ -164,7 +181,7 @@ class _PaymentMethodCardState extends State<PaymentMethodCard> {
 
         SizedBox(
           width: double.infinity,
-          height: 50,
+          height: 56,
           child: ElevatedButton(
             onPressed: () async {
               // Validar Carrito
@@ -187,13 +204,14 @@ class _PaymentMethodCardState extends State<PaymentMethodCard> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: tableId != null ? Colors.blue.shade800 : const Color.fromARGB(255, 15, 95, 15),
+              backgroundColor: _mexicanPink,
+              elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
             child: Text(
-              tableId != null ? 'ENVIAR ORDEN A COCINA' : 'Generar pago',
+              'Confirmar Orden',
               style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ),
@@ -317,32 +335,39 @@ class _PaymentOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
+          color: Colors.white,
           border: Border.all(
-            color: selected ? const Color(0xFF1B0D3A) : Colors.black.withOpacity(0.15),
-            width: selected ? 2 : 1,
+            color: selected ? _mexicanPink : Colors.black.withOpacity(0.08),
+            width: selected ? 3 : 1,
           ),
-          color: selected ? const Color(0xFF1B0D3A).withOpacity(0.04) : null,
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x12000000),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
           children: [
-            Icon(icon, size: 20),
-            const SizedBox(width: 8),
+            Icon(icon, size: 24, color: Colors.black87),
+            const SizedBox(width: 12),
             Text(
               label,
-              style: const TextStyle(fontSize: 14),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const Spacer(),
             if (selected)
               const Icon(
                 Icons.check_circle,
-                size: 18,
-                color: Color(0xFF1B0D3A),
+                size: 22,
+                color: _mexicanPink,
               ),
           ],
         ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 import 'package:restaurant_kiosco/models/modifiers.dart';
 
+const Color _mexicanPink = Color(0xFFE91E63);
+
 /// Selector de extras/modificadores para un producto.
 /// - Carga los grupos desde la API: radios y checkboxes.
 /// - Expone callbacks para: IDs seleccionados, labels, cantidad, nota
@@ -262,40 +264,101 @@ class _ExtraSelectorState extends State<ExtraSelector> {
             ),
             const SizedBox(height: 8),
 
-            // Radios
-            if (_groups[gi].selectionType == SelectionType.radio)
-              ..._groups[gi].modifiers.map((m) {
-                return RadioListTile<int>(
-                  title: Text(m.name),
-                  value: m.id,
-                  groupValue: _radioSelectedByGroup[gi],
-                  activeColor: Colors.redAccent,
-                  onChanged: (v) => setState(() {
-                    _radioSelectedByGroup[gi] = v;
-                    _notifySelectionOnly();
-                  }),
-                );
-              })
+            Column(
+              children: _groups[gi].modifiers.map((m) {
+                final bool isRadio = _groups[gi].selectionType == SelectionType.radio;
+                final bool selected = isRadio
+                    ? _radioSelectedByGroup[gi] == m.id
+                    : _checkSelectedByGroup[gi]!.contains(m.id);
 
-            // Checkboxes
-            else
-              ..._groups[gi].modifiers.map((m) {
-                final set = _checkSelectedByGroup[gi]!;
-                final checked = set.contains(m.id);
-                return CheckboxListTile(
-                  title: Text(m.name),
-                  value: checked,
-                  activeColor: Colors.green,
-                  onChanged: (v) => setState(() {
-                    if (v == true) {
-                      set.add(m.id);
-                    } else {
-                      set.remove(m.id);
-                    }
-                    _notifySelectionOnly();
-                  }),
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    decoration: BoxDecoration(
+                      color: selected ? _mexicanPink : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: selected ? _mexicanPink : Colors.grey.shade300,
+                        width: 1.5,
+                      ),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: _mexicanPink.withValues(alpha: 0.25),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          setState(() {
+                            if (isRadio) {
+                              _radioSelectedByGroup[gi] = m.id;
+                            } else {
+                              final set = _checkSelectedByGroup[gi]!;
+                              if (selected) {
+                                set.remove(m.id);
+                              } else {
+                                set.add(m.id);
+                              }
+                            }
+                            _notifySelectionOnly();
+                          });
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                          child: Row(
+                            children: [
+                              // Icono radio/check animado
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 150),
+                                child: selected
+                                    ? const Icon(
+                                        Icons.check_circle,
+                                        key: ValueKey(true),
+                                        color: Colors.white,
+                                        size: 22,
+                                      )
+                                    : Icon(
+                                        isRadio
+                                            ? Icons.radio_button_unchecked
+                                            : Icons.check_box_outline_blank,
+                                        key: const ValueKey(false),
+                                        color: Colors.grey,
+                                        size: 22,
+                                      ),
+                              ),
+                              const SizedBox(width: 14),
+                              // Nombre de la opción
+                              Expanded(
+                                child: Text(
+                                  m.name,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: selected
+                                        ? Colors.white
+                                        : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 );
-              }),
+              }).toList(),
+            ),
 
             const Divider(height: 24),
           ],
@@ -335,11 +398,25 @@ class _ExtraSelectorState extends State<ExtraSelector> {
         // Nota
         TextField(
           controller: _noteCtrl,
-          maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: 'Nota (opcional)',
-            border: OutlineInputBorder(),
+          maxLines: 3,
+          decoration: InputDecoration(
+            hintText: '¿Alguna instrucción especial? (sin cebolla, extra salsa...)',
+            filled: true,
+            fillColor: Colors.grey.shade100,
             isDense: true,
+            contentPadding: const EdgeInsets.all(12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: _mexicanPink, width: 2),
+            ),
           ),
           onChanged: (_) => widget.onNoteChanged?.call(_normalizedNote()),
         ),

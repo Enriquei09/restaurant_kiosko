@@ -4,6 +4,7 @@ import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/presentation/widgets/products_selected.dart';
 import 'package:restaurant_kiosco/presentation/screens/checkout/checkout_screen.dart';
 
+const Color _mexicanPink = Color(0xFFE4007C);
 
 
 class ButtonIcon extends StatelessWidget {
@@ -11,59 +12,54 @@ class ButtonIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalItems = context.watch<CartModel>().totalItems;
+    final cart = context.watch<CartModel>();
+    final total = cart.total;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton.filled(
-          iconSize: 20,
-          icon: const Icon(
-            Icons.shopping_cart_outlined,
-            color: Color.fromARGB(255, 247, 246, 246),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x55E4007C),
+            blurRadius: 30,
+            offset: Offset(0, 12),
+            spreadRadius: 2,
           ),
-          onPressed: () async {
-            final goCheckout = await showDialog<bool>(
-              context: context,
-              barrierDismissible: true,
-              builder: (_) => ProductsSelected(),
-            );
-
-            if (goCheckout == true) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CheckoutScreen()),
-              );
-            }
-          },
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: FloatingActionButton.extended(
+        heroTag: null,
+        elevation: 0,
+        highlightElevation: 0,
+        backgroundColor: _mexicanPink,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        icon: const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 26),
+        label: Text(
+          '\$${total.toStringAsFixed(2)}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            letterSpacing: 0.3,
+          ),
         ),
+        onPressed: () async {
+          final goCheckout = await ProductsSelected.show(context);
+          if (!context.mounted) return;
 
-        // ✅ Badge contador
-        if (totalItems > 0)
-          Positioned(
-            right: -2,
-            top: -9,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.white, width: 2),
-              ),
-              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-              child: Center(
-                child: Text(
-                  '$totalItems',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
+          if (goCheckout == true) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CheckoutScreen()),
+            );
+          }
+        },
+      ),
     );
   }
 }

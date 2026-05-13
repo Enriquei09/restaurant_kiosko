@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:restaurant_kiosco/presentation/widgets/button_icon.dart';
 
 class BuildHeader extends StatelessWidget {
   const BuildHeader({super.key});
@@ -37,8 +36,6 @@ class BuildHeader extends StatelessWidget {
             // ),
 
             //ButtonIcon() es el boton de carrito de compra
-            ButtonIcon(),
-            const SizedBox(width: 12),
             const Icon(Icons.person_3_outlined),
           ],
         ),

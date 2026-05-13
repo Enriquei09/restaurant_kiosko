@@ -1,127 +1,182 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/presentation/widgets/edit_cart_item_dialog.dart';
 import 'package:restaurant_kiosco/presentation/widgets/promotion_widgets.dart';
 
+const Color _mexicanPink = Color(0xFFE4007C);
+
 class ProductsSelected extends StatelessWidget {
   const ProductsSelected({super.key});
 
   /// Helper para abrir el modal permitiendo cerrar tocando afuera.
-  static Future<void> show(BuildContext context) {
-    return showDialog(
+  static Future<bool?> show(BuildContext context) {
+    return showGeneralDialog<bool>(
       context: context,
       barrierDismissible: true, // tap fuera del modal = cerrar
-      builder: (_) => const ProductsSelected(),
+      barrierLabel: 'Cerrar carrito',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 280),
+      pageBuilder: (dialogContext, __, ___) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.pop(dialogContext),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                child: Container(color: Colors.black.withValues(alpha: 0.42)),
+              ),
+            ),
+            const SafeArea(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: ProductsSelected(),
+              ),
+            ),
+          ],
+        );
+      },
+      transitionBuilder: (context, animation, _, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(
+            opacity: curved,
+            child: child,
+          ),
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartModel>();
+    final size = MediaQuery.of(context).size;
+    final panelWidth = size.width >= 1000 ? size.width * 0.40 : size.width * 0.92;
+    final panelHeight = size.height - 24;
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Material(
+      color: Colors.transparent,
       child: SizedBox(
-        width: 420,
-        height: 700,
-        child: Column(
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Productos Seleccionados',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Cerrar',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
+        width: panelWidth,
+        height: panelHeight,
+        child: GestureDetector(
+          onTap: () {},
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(24),
+                bottomLeft: Radius.circular(24),
               ),
             ),
-            const Divider(height: 1),
-
-            // Lista del carrito
-            Expanded(
-              child: cart.items.isEmpty
-                  ? const Center(child: Text('Tu carrito está vacío'))
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: cart.items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (_, i) => _CartRow(index: i),
-                    ),
-            ),
-
-            // Sugerencias de promoción
-            if (cart.promotionSuggestions.isNotEmpty)
-              ...cart.promotionSuggestions.map((s) => PromotionSuggestionBanner(
-                    message: s.message,
-                  )),
-
-            const Divider(height: 1),
-
-            // Totales + acciones
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  // Descuentos aplicados
-                  if (cart.appliedPromotions.isNotEmpty)
-                    PromotionDiscountSummary(
-                      promotions: cart.appliedPromotions
-                          .map((p) => (
-                                name: p.name,
-                                badge: p.badgeLabel,
-                                discount: p.discount,
-                              ))
-                          .toList(),
-                      totalDiscount: cart.promotionDiscount,
-                    ),
-                  _total('Subtotal', cart.subtotal),
-                  if (cart.promotionDiscount > 0)
-                    _total('Descuento', -cart.promotionDiscount, isDiscount: true),
-                  _total('IVA (16%)', cart.tax),
-                  if (cart.loadingPromotions)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 4),
-                      child: LinearProgressIndicator(),
-                    ),
-                  _total('Total', cart.total, bold: true),
-                  const SizedBox(height: 12),
-                  Row(
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Row(
                     children: [
-                      Expanded(
-                        child: ElevatedButton(
-                           onPressed: () {
-                            Navigator.pop(context); // cierra el diálogo
-                            // Skip Table Input for "Automatic" flow (Option A)
-                            Navigator.pushNamed(context, '/checkout');
-                          },                          
-                          
-                          child: const Text('Confirmar'),
+                      const Expanded(
+                        child: Text(
+                          'Productos Seleccionados',
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Cancelar'),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+
+                // Lista del carrito
+                Expanded(
+                  child: cart.items.isEmpty
+                      ? const Center(child: Text('Tu carrito está vacío'))
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: cart.items.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (_, i) => _CartRow(index: i),
+                        ),
+                ),
+
+                // Sugerencias de promoción
+                if (cart.promotionSuggestions.isNotEmpty)
+                  ...cart.promotionSuggestions.map((s) => PromotionSuggestionBanner(
+                        message: s.message,
+                      )),
+
+                const Divider(height: 1),
+
+                // Totales + acciones
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+                  child: Column(
+                    children: [
+                      // Descuentos aplicados
+                      if (cart.appliedPromotions.isNotEmpty)
+                        PromotionDiscountSummary(
+                          promotions: cart.appliedPromotions
+                              .map((p) => (
+                                    name: p.name,
+                                    badge: p.badgeLabel,
+                                    discount: p.discount,
+                                  ))
+                              .toList(),
+                          totalDiscount: cart.promotionDiscount,
+                        ),
+                      _total('Subtotal', cart.subtotal),
+                      if (cart.promotionDiscount > 0)
+                        _total('Descuento', -cart.promotionDiscount, isDiscount: true),
+                      _total('IVA (16%)', cart.tax),
+                      if (cart.loadingPromotions)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 4),
+                          child: LinearProgressIndicator(),
+                        ),
+                      _total('Total', cart.total, bold: true),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 62,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.pushNamed(context, '/checkout');
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _mexicanPink,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: const Text(
+                            'Confirmar',
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -214,6 +269,8 @@ class _CartRowState extends State<_CartRow> {
       borderRadius: BorderRadius.circular(12),
       onTap: () => EditCartItemDialog.show(context, index: widget.index),
       child: Card(
+        elevation: 0,
+        color: const Color(0xFFFCFCFC),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: const EdgeInsets.all(10.0),
@@ -235,14 +292,29 @@ class _CartRowState extends State<_CartRow> {
                     ),
                   ),
 
-                  if (!isEditingQty) Text('x ${it.qty}'),
-                  const SizedBox(width: 10),
-
-                  // Botón Editar: también abre el selector
-                  OutlinedButton(
-                    onPressed: () => EditCartItemDialog.show(context, index: widget.index),
-                    child: const Text('Editar'),
+                  Row(
+                    children: [
+                      _QtyCircleButton(
+                        icon: Icons.remove,
+                        onTap: () => cart.decrease(widget.index),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text(
+                          '${it.qty}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ),
+                      _QtyCircleButton(
+                        icon: Icons.add,
+                        onTap: () => cart.setQty(widget.index, it.qty + 1),
+                      ),
+                    ],
                   ),
+                  const SizedBox(width: 6),
                   IconButton(
                     icon: const Icon(Icons.delete, color: Colors.red),
                     onPressed: () => cart.removeAt(widget.index),
@@ -287,4 +359,35 @@ class _CartRowState extends State<_CartRow> {
       ),
     );
   }
+}
+
+class _QtyCircleButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _QtyCircleButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: const BoxDecoration(
+          color: _mexicanPink,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, size: 24, color: Colors.white),
+      ),
+    );
+  }
+}
+
+class OrderCartSummary extends ProductsSelected {
+  const OrderCartSummary({super.key});
 }
