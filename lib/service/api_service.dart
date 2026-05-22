@@ -986,7 +986,7 @@ class ApiService {
 
   // ==================== TABLES ====================
 
-  /// Obtener lista de mesas de un restaurante (con estado).
+  /// Obtener lista de mesas de un restaurante (con estado, ui_color y flags).
   static Future<List<Map<String, dynamic>>> fetchTables(int restaurantId, {int? locationId}) async {
     final queryParams = {
       'restaurant_id': restaurantId.toString(),
@@ -996,9 +996,92 @@ class ApiService {
     final res = await _get(url, headers: _getHeaders);
 
     if (res.statusCode == 200) {
-      return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+      final body = jsonDecode(res.body);
+
+      // Laravel's AnonymousResourceCollection envuelve la lista en { "data": [...] }
+      final List<dynamic> rawList;
+      if (body is Map<String, dynamic> && body['data'] is List) {
+        rawList = body['data'] as List<dynamic>;
+      } else if (body is List) {
+        rawList = body;
+      } else {
+        throw Exception('Formato de respuesta inesperado al cargar mesas.');
+      }
+
+      // Cast seguro elemento por elemento para evitar '_JsonMap is not Iterable'
+      return rawList
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
     } else {
       throw Exception('Error al cargar mesas: ${res.statusCode}');
+    }
+  }
+
+  /// Abre una mesa libre: crea la orden inicial con los [items] del carrito
+  /// y cambia el estado a 'occupied'.
+  /// Devuelve { table, order } con el nuevo estado de la mesa.
+  static Future<Map<String, dynamic>> openTable(
+    int tableId, {
+    int? waiterId,
+    List<Map<String, dynamic>> items = const [],
+  }) async {
+    final url = Uri.parse('$baseUrl/tables/$tableId/open');
+    final payload = <String, dynamic>{
+      if (waiterId != null) 'waiter_id': waiterId,
+      if (items.isNotEmpty) 'items': items,
+    };
+    final res = await _post(url, headers: _headers, body: jsonEncode(payload));
+
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return body['data'] as Map<String, dynamic>;
+    } else {
+      final msg = _extractMessage(res);
+      throw Exception(msg);
+    }
+  }
+
+  /// Adquiere el lock de edición para el mesero autenticado.
+  /// Lanza [Exception] con 'La mesa está siendo editada por otro mesero' si hay conflicto.
+  static Future<Map<String, dynamic>> lockTable(int tableId) async {
+    final url = Uri.parse('$baseUrl/tables/$tableId/lock');
+    final res = await _post(url, headers: _headers);
+
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return body['data'] as Map<String, dynamic>;
+    } else {
+      final msg = _extractMessage(res);
+      throw Exception(msg);
+    }
+  }
+
+  /// Libera el lock de edición. Sin body.
+  static Future<Map<String, dynamic>> releaseTableLock(int tableId) async {
+    final url = Uri.parse('$baseUrl/tables/$tableId/release-lock');
+    final res = await _post(url, headers: _headers);
+
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return body['data'] as Map<String, dynamic>;
+    } else {
+      final msg = _extractMessage(res);
+      throw Exception(msg);
+    }
+  }
+
+  /// Congela la cuenta: occupied → bill_printed.
+  /// Devuelve la mesa actualizada con ui_color = '#0056D2' (azul).
+  static Future<Map<String, dynamic>> printPreBill(int tableId) async {
+    final url = Uri.parse('$baseUrl/tables/$tableId/print-pre-bill');
+    final res = await _post(url, headers: _headers);
+
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return body['data'] as Map<String, dynamic>;
+    } else {
+      final msg = _extractMessage(res);
+      throw Exception(msg);
     }
   }
 
@@ -1015,6 +1098,16 @@ class ApiService {
       return jsonDecode(res.body);
     } else {
       throw Exception('Error al actualizar mesa: ${res.statusCode}');
+    }
+  }
+
+  /// Extrae el campo 'message' del body JSON de una respuesta de error.
+  static String _extractMessage(http.Response res) {
+    try {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return body['message']?.toString() ?? 'Error ${res.statusCode}';
+    } catch (_) {
+      return 'Error ${res.statusCode}';
     }
   }
 }

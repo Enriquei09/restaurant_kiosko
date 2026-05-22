@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/cash_register.dart';
 import '../models/cash_register_terminal.dart';
+import '../service/api_service.dart';
 
 class PosProvider with ChangeNotifier {
   // Información del tenant y restaurante (valores por defecto)
@@ -31,6 +32,8 @@ class PosProvider with ChangeNotifier {
 
   void setRestaurantId(int restaurantId) {
     _restaurantId = restaurantId;
+    // Sincronizar con ApiService para que todas las requests usen X-Restaurant-Id
+    ApiService.setRestaurantId(restaurantId);
     notifyListeners();
   }
 

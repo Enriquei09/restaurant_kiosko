@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../service/api_service.dart';
 import '../../models/kitchen_order.dart';
+import '../../providers/table_provider.dart';
+import '../../providers/cart_model.dart';
 
 class TableDetailScreen extends StatefulWidget {
   final int tableId;
   final String tableName;
+  final bool isBillPrinted;
   
   const TableDetailScreen({
     Key? key,
     required this.tableId,
     required this.tableName,
+    this.isBillPrinted = false,
   }) : super(key: key);
 
   @override
@@ -48,6 +53,33 @@ class _TableDetailScreenState extends State<TableDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        
+        // Al salir del detalle, verificar si se envió a cocina
+        final cart = context.read<CartModel>();
+        final orderWasSent = cart.tableId == null; // Si tableId es null, la orden fue enviada
+        
+        if (!orderWasSent) {
+          // La orden NO fue enviada → liberar el lock
+          try {
+            final tp = Provider.of<TableProvider>(context, listen: false);
+            await tp.releaseLock(widget.tableId);
+          } catch (e) {
+            // Intentar liberar pero no bloquear el pop
+            debugPrint('Error liberando lock: $e');
+          }
+        }
+        
+        Navigator.of(context).pop();
+      },
+      child: _buildScaffold(),
+    );
+  }
+
+  Widget _buildScaffold() {
     return Scaffold(
       appBar: AppBar(
         title: Text('${widget.tableName} - Cuenta'),
@@ -62,13 +94,19 @@ class _TableDetailScreenState extends State<TableDetailScreen> {
         ),
         elevation: 0,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _currentOrder == null
-              ? _buildNoOrderView()
-              : _buildOrderView(),
+      body: _buildBody(),
     );
   }
+
+  Widget _buildBody() {
+    return _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _currentOrder == null
+            ? _buildNoOrderView()
+            : _buildOrderView();
+  }
+
+
 
   Widget _buildNoOrderView() {
     return Center(
@@ -331,49 +369,96 @@ class _TableDetailScreenState extends State<TableDetailScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          // Botón para agregar más items
-          ElevatedButton.icon(
-            onPressed: () {
-              // Navegar al menú para agregar items a esta orden
-              Navigator.pushNamed(
-                context,
-                '/menu',
-                arguments: {
-                  'tableId': widget.tableId,
-                  'tableName': widget.tableName,
-                  'existingOrderId': _currentOrder!.id,
-                },
-              ).then((_) => _loadCurrentOrder());
-            },
-            icon: const Icon(Icons.add_shopping_cart),
-            label: const Text('Agregar Más Items'),
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 56),
-              backgroundColor: Colors.blue.shade600,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
+
+          // ── Acciones según estado ─────────────────────────────────────
+          if (widget.isBillPrinted)
+            // Cuenta congelada: solo mostrar banner informativo
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0056D2),
                 borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0056D2).withOpacity(0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
-              elevation: 4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context, true);
-            },
-            icon: const Icon(Icons.payment_rounded),
-            label: const Text('Ir a Cobrar'),
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 56),
-              backgroundColor: const Color(0xFF2E7D32),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 36),
+                  SizedBox(height: 12),
+                  Text(
+                    'Esperando Confirmación\nde Pago en Caja',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      height: 1.3,
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'La cuenta ya fue enviada. El cajero\nprocesará el pago en breve.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
-              elevation: 4,
+            )
+          else ...[
+            // Botón para agregar más items (solo cuando la cuenta NO está impresa)
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pushNamed(
+                  context,
+                  '/menu',
+                  arguments: {
+                    'tableId': widget.tableId,
+                    'tableName': widget.tableName,
+                    'existingOrderId': _currentOrder!.id,
+                  },
+                ).then((_) => _loadCurrentOrder());
+              },
+              icon: const Icon(Icons.add_shopping_cart),
+              label: const Text('Agregar Más Items'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 56),
+                backgroundColor: Colors.blue.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 4,
+              ),
             ),
-          ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              icon: const Icon(Icons.payment_rounded),
+              label: const Text('Ir a Cobrar'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 56),
+                backgroundColor: const Color(0xFF2E7D32),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 4,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: () {

@@ -244,26 +244,6 @@ class _CartRowState extends State<_CartRow> {
     final cart = context.watch<CartModel>();
     final it = cart.items[widget.index];
 
-    Widget image() {
-      final path = it.imagePath;
-      if (path == null || path.isEmpty) {
-        return Container(
-          width: 50, height: 50,
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.fastfood),
-        );
-      }
-      final isNetwork = path.startsWith('http');
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: isNetwork
-            ? Image.network(path, width: 50, height: 50, fit: BoxFit.cover)
-            : Image.asset(path, width: 50, height: 50, fit: BoxFit.cover),
-      );
-    }
-
     // 👉 Toda la tarjeta es "clickeable" para abrir el editor
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -273,83 +253,103 @@ class _CartRowState extends State<_CartRow> {
         color: const Color(0xFFFCFCFC),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
-          padding: const EdgeInsets.all(10.0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  image(),
-                  const SizedBox(width: 10),
-
-                  // Nombre + precio
+                  // ── Nombre, precio y subtotal ────────────────────────────
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(it.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text('\$${it.unitPrice.toStringAsFixed(2)} c/u'),
+                        Text(
+                          it.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '\$${it.unitPrice.toStringAsFixed(2)} c/u',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          'Subtotal: \$${(it.unitPrice * it.qty).toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E3A6D),
+                          ),
+                        ),
                       ],
                     ),
                   ),
 
-                  Row(
+                  const SizedBox(width: 12),
+
+                  // ── Contador cápsula + eliminar ────────────────────────────
+                  Column(
                     children: [
-                      _QtyCircleButton(
-                        icon: Icons.remove,
-                        onTap: () => cart.decrease(widget.index),
+                      _QtyStepperCapsule(
+                        qty: it.qty,
+                        onDecrement: () => cart.decrease(widget.index),
+                        onIncrement: () => cart.setQty(widget.index, it.qty + 1),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      const SizedBox(height: 6),
+                      GestureDetector(
+                        onTap: () => cart.removeAt(widget.index),
                         child: Text(
-                          '${it.qty}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
+                          'Eliminar',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red[400],
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
-                      _QtyCircleButton(
-                        icon: Icons.add,
-                        onTap: () => cart.setQty(widget.index, it.qty + 1),
-                      ),
                     ],
-                  ),
-                  const SizedBox(width: 6),
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => cart.removeAt(widget.index),
-                    tooltip: 'Eliminar',
                   ),
                 ],
               ),
 
-              // Modificadores (labels)
-              if (it.modifierLabels.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: -6,
-                    children: it.modifierLabels
-                        .map((lbl) => Chip(
-                              label: Text(lbl),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ))
-                        .toList(),
-                  ),
+              // ── Modificadores (chips) ────────────────────────────────────
+              if (it.modifierLabels.isNotEmpty) ...[                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: -4,
+                  children: it.modifierLabels
+                      .map((lbl) => Chip(
+                            label: Text(lbl, style: const TextStyle(fontSize: 12)),
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            padding: EdgeInsets.zero,
+                          ))
+                      .toList(),
                 ),
               ],
 
-              // Nota
-              if (it.note != null && it.note!.trim().isNotEmpty) ...[
-                const SizedBox(height: 6),
+              // ── Nota ────────────────────────────────────────────────────
+              if (it.note != null && it.note!.trim().isNotEmpty) ...[                const SizedBox(height: 6),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.note_alt_outlined, size: 16),
+                    Icon(Icons.note_alt_outlined, size: 14, color: Colors.grey[500]),
                     const SizedBox(width: 6),
-                    Expanded(child: Text(it.note!, style: const TextStyle(fontSize: 12))),
+                    Expanded(
+                      child: Text(
+                        it.note!,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -361,28 +361,73 @@ class _CartRowState extends State<_CartRow> {
   }
 }
 
-class _QtyCircleButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
+/// Cápsula con fondo gris claro que agrupa [−] cantidad [+]
+class _QtyStepperCapsule extends StatelessWidget {
+  final int qty;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
 
-  const _QtyCircleButton({
-    required this.icon,
-    required this.onTap,
+  const _QtyStepperCapsule({
+    required this.qty,
+    required this.onDecrement,
+    required this.onIncrement,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: const BoxDecoration(
-          color: _mexicanPink,
-          shape: BoxShape.circle,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Botón [-]
+          _StepperBtn(icon: Icons.remove, onTap: onDecrement),
+          // Número
+          SizedBox(
+            width: 36,
+            child: Text(
+              '$qty',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          // Botón [+]
+          _StepperBtn(icon: Icons.add, onTap: onIncrement),
+        ],
+      ),
+    );
+  }
+}
+
+/// Botón circular Rosa Mexicano con icono blanco
+class _StepperBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _StepperBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _mexicanPink,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.hardEdge,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(icon, color: Colors.white, size: 20),
         ),
-        child: Icon(icon, size: 24, color: Colors.white),
       ),
     );
   }

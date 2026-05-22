@@ -4,12 +4,15 @@ import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
 import 'package:restaurant_kiosco/providers/pos_provider.dart';
+import 'package:restaurant_kiosco/providers/table_provider.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 
 import 'payment_success_screen.dart';
 
 class CashPaymentScreen extends StatefulWidget {
-  const CashPaymentScreen({super.key});
+  final int? tableId; // tableId cuando está en flujo de mesero
+  
+  const CashPaymentScreen({super.key, this.tableId});
 
   @override
   State<CashPaymentScreen> createState() => _CashPaymentScreenState();
@@ -29,55 +32,72 @@ class _CashPaymentScreenState extends State<CashPaymentScreen> {
     final taxAmount = subtotal * cart.taxRate;
     final total = subtotal + tipAmount + taxAmount;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pagar en Caja'),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 700),
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.storefront, size: 100, color: Colors.blue.shade800),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Pagar en Mostrador',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Total a pagar: \$${total.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.green),
-                  ),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Al confirmar, se generará tu orden. Deberás pasar a la caja para realizar el pago y que tu comida empiece a prepararse.',
-                    style: TextStyle(fontSize: 18),
-                    textAlign: TextAlign.center,
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () async {
-                              setState(() => _isLoading = true);
-                              try {
-                                final payment = context.read<PaymentModel>();
-                                
-                                final orderItems = items.map((item) {
-                                  return {
-                                    'product_id': item.productId,
-                                    'quantity': item.qty,
-                                    'unit_price': item.unitPrice,
-                                    'subtotal': item.unitPrice * item.qty,
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        
+        // Al cancelar pago en flujo de mesero, liberar lock
+        if (widget.tableId != null && cart.tableId != null) {
+          try {
+            final tp = Provider.of<TableProvider>(context, listen: false);
+            await tp.releaseLock(widget.tableId!);
+          } catch (e) {
+            debugPrint('Error liberando lock: $e');
+          }
+        }
+        
+        Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Pagar en Caja'),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 700),
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.storefront, size: 100, color: Colors.blue.shade800),
+                    const SizedBox(height: 32),
+                    const Text(
+                      'Pagar en Mostrador',
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Total a pagar: \$${total.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.green),
+                    ),
+                    const SizedBox(height: 32),
+                    const Text(
+                      'Al confirmar, se generará tu orden. Deberás pasar a la caja para realizar el pago y que tu comida empiece a prepararse.',
+                      style: TextStyle(fontSize: 18),
+                      textAlign: TextAlign.center,
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () async {
+                                setState(() => _isLoading = true);
+                                try {
+                                  final payment = context.read<PaymentModel>();
+                                  
+                                  final orderItems = items.map((item) {
+                                    return {
+                                      'product_id': item.productId,
+                                      'quantity': item.qty,
+                                      'unit_price': item.unitPrice,
+                                      'subtotal': item.unitPrice * item.qty,
                                     'notes': item.note,
                                     'modifiers': item.modifierIds,
                                   };
@@ -144,6 +164,7 @@ class _CashPaymentScreenState extends State<CashPaymentScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }

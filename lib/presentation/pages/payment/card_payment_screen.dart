@@ -4,12 +4,15 @@ import 'package:restaurant_kiosco/providers/cart_model.dart';
 import 'package:restaurant_kiosco/providers/tip_model.dart';
 import 'package:restaurant_kiosco/providers/payment_model.dart';
 import 'package:restaurant_kiosco/providers/pos_provider.dart';
+import 'package:restaurant_kiosco/providers/table_provider.dart';
 import 'package:restaurant_kiosco/service/api_service.dart';
 
 import 'payment_success_screen.dart';
 
 class CardPaymentScreen extends StatefulWidget {
-  const CardPaymentScreen({super.key});
+  final int? tableId; // tableId cuando está en flujo de mesero
+  
+  const CardPaymentScreen({super.key, this.tableId});
 
   @override
   State<CardPaymentScreen> createState() => _CardPaymentScreenState();
@@ -28,54 +31,71 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
     final taxAmount = subtotal * cart.taxRate; // por ahora lo dejamos
     final total = subtotal + tipAmount + taxAmount;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pago con tarjeta'),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 700),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Total a cobrar',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '\$${total.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 20),
-
-                  Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      side: BorderSide(color: Colors.black.withValues(alpha: 0.1)),
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        
+        // Al cancelar pago en flujo de mesero, liberar lock
+        if (widget.tableId != null && cart.tableId != null) {
+          try {
+            final tp = Provider.of<TableProvider>(context, listen: false);
+            await tp.releaseLock(widget.tableId!);
+          } catch (e) {
+            debugPrint('Error liberando lock: $e');
+          }
+        }
+        
+        Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Pago con tarjeta'),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 700),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Total a cobrar',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                     ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Icon(Icons.credit_card, size: 26),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Inserte o acerque la tarjeta al lector para procesar el pago.',
-                              style: TextStyle(fontSize: 13),
+                    const SizedBox(height: 8),
+                    Text(
+                      '\$${total.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 20),
+
+                    Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: Colors.black.withValues(alpha: 0.1)),
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Icon(Icons.credit_card, size: 26),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Inserte o acerque la tarjeta al lector para procesar el pago.',
+                                style: TextStyle(fontSize: 13),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
 
-                  const Spacer(),
+                    const Spacer(),
 
                   SizedBox(
                     width: double.infinity,
@@ -178,6 +198,7 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }

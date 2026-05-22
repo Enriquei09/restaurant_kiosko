@@ -33,6 +33,16 @@ class CartItem {
     modifierLabels: modifierLabels, 
   );
 
+  /// Clave única que identifica la combinación exacta de producto + opciones + nota.
+  /// Misma combinación  → autoincremento de cantidad.
+  /// Distinta combinación → línea nueva e independiente en el carrito.
+  String get uniqueCombinationKey {
+    final sortedIds = List<int>.from(modifierIds)..sort();
+    final mods = sortedIds.join('-');
+    final noteKey = (note ?? '').trim();
+    return '${productId}_${mods}_$noteKey';
+  }
+
   double get modifierTotal => 0; // si cobras extras, súmalos aquí
   double get line => (unitPrice + modifierTotal) * qty;
 

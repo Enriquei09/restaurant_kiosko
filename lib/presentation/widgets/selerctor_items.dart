@@ -8,7 +8,8 @@ const Color _mexicanPink = Color(0xFFE91E63);
 /// - Carga los grupos desde la API: radios y checkboxes.
 /// - Expone callbacks para: IDs seleccionados, labels, cantidad, nota
 ///   y (opcional) total extra de modificadores.
-/// - Muestra controles de Cantidad y Nota al final (siempre, aunque no haya grupos).
+/// - Si [currentStep] no es null, muestra SOLO el grupo en ese índice (modo paginado).
+/// - Muestra controles de Cantidad y Nota sólo cuando [showQtyNote] es true.
 class ExtraSelector extends StatefulWidget {
   const ExtraSelector({
     super.key,
@@ -18,9 +19,12 @@ class ExtraSelector extends StatefulWidget {
     this.onQtyChanged,           // Cantidad
     this.onNoteChanged,          // Nota
     this.onExtraTotalChanged,    // (opcional) Total $ de modificadores
+    this.onGroupsLoaded,         // Cuántos grupos hay
     this.initialQty = 1,
     this.initialNote,
     this.initialSelectedIds = const [],
+    this.currentStep,            // null = mostrar todos; int = modo paginado
+    this.showQtyNote = true,     // mostrar controles cantidad/nota
   });
 
   /// ID del producto para consultar sus grupos de modificadores
@@ -41,6 +45,9 @@ class ExtraSelector extends StatefulWidget {
   /// (Opcional) Callback con la suma de precios de los modificadores seleccionados
   final ValueChanged<double>? onExtraTotalChanged;
 
+  /// Notifica cuántos grupos se cargaron desde la API
+  final ValueChanged<int>? onGroupsLoaded;
+
   /// Valor inicial de cantidad
   final int initialQty;
 
@@ -49,6 +56,12 @@ class ExtraSelector extends StatefulWidget {
 
   /// IDs de modificadores a preseleccionar al cargar
   final List<int> initialSelectedIds;
+
+  /// Índice del grupo a mostrar (null = mostrar todos)
+  final int? currentStep;
+
+  /// Si se deben mostrar los controles de cantidad y nota
+  final bool showQtyNote;
 
   @override
   State<ExtraSelector> createState() => _ExtraSelectorState();
@@ -120,6 +133,9 @@ class _ExtraSelectorState extends State<ExtraSelector> {
         _groups = groups;
         _loading = false;
       });
+
+      // Notificar al padre el número de grupos
+      widget.onGroupsLoaded?.call(groups.length);
 
       // Preseleccionar ids recibidos
       _applyInitialSelectedIds();
@@ -246,18 +262,25 @@ class _ExtraSelectorState extends State<ExtraSelector> {
 
     // Si no hay grupos, aún mostramos cantidad y nota
     if (_groups.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: _qtyNoteSection(),
-      );
+      return widget.showQtyNote
+          ? Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: _qtyNoteSection(),
+            )
+          : const SizedBox.shrink();
     }
+
+    // Modo paginado: sólo mostrar el grupo del paso actual
+    final groupsToShow = widget.currentStep != null
+        ? [widget.currentStep!]
+        : List.generate(_groups.length, (i) => i);
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (int gi = 0; gi < _groups.length; gi++) ...[
+          for (final gi in groupsToShow) ...[
             Text(
               _groups[gi].type, // título del grupo (viene del backend)
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -363,8 +386,8 @@ class _ExtraSelectorState extends State<ExtraSelector> {
             const Divider(height: 24),
           ],
 
-          // Controles de cantidad y nota
-          _qtyNoteSection(),
+          // Controles de cantidad y nota (sólo si se solicitan)
+          if (widget.showQtyNote) _qtyNoteSection(),
         ],
       ),
     );

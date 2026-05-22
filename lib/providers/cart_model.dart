@@ -54,11 +54,8 @@ class CartModel extends ChangeNotifier {
 
 
   void add(CartItem item) {
-    final i = _items.indexWhere((e) =>
-      e.productId == item.productId &&
-      _eq(e.modifierIds, item.modifierIds) &&
-      e.note == item.note
-    );
+    final key = item.uniqueCombinationKey;
+    final i = _items.indexWhere((e) => e.uniqueCombinationKey == key);
     if (i >= 0) {
       _items[i] = _items[i].copyWith(qty: _items[i].qty + item.qty);
     } else {
@@ -164,14 +161,6 @@ class CartModel extends ChangeNotifier {
     }
   }
 
-  bool _eq(List<int> a, List<int> b) {
-    if (a.length != b.length) return false;
-    final aa = [...a]..sort(), bb = [...b]..sort();
-    for (var i = 0; i < aa.length; i++) {
-      if (aa[i] != bb[i]) return false;
-    }
-    return true;
-  }
   void replaceAt(int index, CartItem updated) {
     if (index < 0 || index >= _items.length) return;
     _items[index] = updated;
