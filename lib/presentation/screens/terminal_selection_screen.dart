@@ -12,7 +12,8 @@ class TerminalSelectionScreen extends StatefulWidget {
   const TerminalSelectionScreen({Key? key}) : super(key: key);
 
   @override
-  State<TerminalSelectionScreen> createState() => _TerminalSelectionScreenState();
+  State<TerminalSelectionScreen> createState() =>
+      _TerminalSelectionScreenState();
 }
 
 class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
@@ -34,30 +35,37 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
 
     try {
       final posProvider = Provider.of<PosProvider>(context, listen: false);
-      
+
       final response = await ApiService.getTerminals(
         tenantId: posProvider.tenantId,
         restaurantId: posProvider.restaurantId,
       );
-      
+
       if (response['success'] == true) {
-        setState(() {
-          terminals = (response['terminals'] as List)
-              .map((terminal) => CashRegisterTerminal.fromJson(terminal))
-              .toList();
-          isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            terminals =
+                (response['terminals'] as List)
+                    .map((terminal) => CashRegisterTerminal.fromJson(terminal))
+                    .toList();
+            isLoading = false;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            errorMessage = response['message'] ?? 'Error al cargar terminales';
+            isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          errorMessage = response['message'] ?? 'Error al cargar terminales';
+          errorMessage = 'Error de conexión: $e';
           isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        errorMessage = 'Error de conexión: $e';
-        isLoading = false;
-      });
     }
   }
 
@@ -87,7 +95,10 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
   // ── Flujo directo para usuario ya autenticado ──────────────
 
   Future<void> _handleDirectOpen(CashRegisterTerminal terminal) async {
-    setState(() { isLoading = true; errorMessage = ''; });
+    setState(() {
+      isLoading = true;
+      errorMessage = '';
+    });
 
     try {
       final posProvider = Provider.of<PosProvider>(context, listen: false);
@@ -101,8 +112,9 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
 
         if (currentRes['cash_register'] != null) {
           // Ya hay caja abierta → recuperar y navegar directo al POS
-          final cashRegister =
-              CashRegister.fromJson(currentRes['cash_register']);
+          final cashRegister = CashRegister.fromJson(
+            currentRes['cash_register'],
+          );
           posProvider.setCurrentCashRegister(cashRegister);
 
           if (mounted) {
@@ -128,7 +140,9 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
       // ── 2. No hay caja abierta → mostrar diálogo de balance inicial ──
       final openingBalance = await _showOpeningBalanceDialog(terminal);
       if (openingBalance == null) {
-        setState(() { isLoading = false; });
+        setState(() {
+          isLoading = false;
+        });
         return;
       }
 
@@ -144,8 +158,7 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
       );
 
       if (response['cash_register'] != null) {
-        final cashRegister =
-            CashRegister.fromJson(response['cash_register']);
+        final cashRegister = CashRegister.fromJson(response['cash_register']);
         posProvider.setCurrentCashRegister(cashRegister);
 
         if (mounted) {
@@ -170,58 +183,60 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
   }
 
   Future<double?> _showOpeningBalanceDialog(
-      CashRegisterTerminal terminal) async {
+    CashRegisterTerminal terminal,
+  ) async {
     final controller = TextEditingController();
     return showDialog<double>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text('Balance Inicial - ${terminal.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Ingresa el balance inicial de la caja:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Balance inicial',
-                hintText: '0.00',
-                prefixText: '\$ ',
-                border: OutlineInputBorder(),
-              ),
-              autofocus: true,
+      builder:
+          (ctx) => AlertDialog(
+            title: Text('Balance Inicial - ${terminal.name}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Ingresa el balance inicial de la caja:'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Balance inicial',
+                    hintText: '0.00',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(),
+                  ),
+                  autofocus: true,
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('Cancelar'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(null),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final text = controller.text.isEmpty ? '0' : controller.text;
+                  final balance = double.tryParse(text);
+                  if (balance != null && balance >= 0) {
+                    Navigator.of(ctx).pop(balance);
+                  }
+                },
+                child: const Text('Abrir Caja'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              final text =
-                  controller.text.isEmpty ? '0' : controller.text;
-              final balance = double.tryParse(text);
-              if (balance != null && balance >= 0) {
-                Navigator.of(ctx).pop(balance);
-              }
-            },
-            child: const Text('Abrir Caja'),
-          ),
-        ],
-      ),
     );
   }
 
   // ── Constantes de diseño ──────────────────────────────────
-  static const _kBg         = Color(0xFFF5F5F5);
-  static const _kEmerald    = Color(0xFF2E7D32); // verde esmeralda
-  static const _kDark       = Color(0xFF212121);
-  static const _kSubtle     = Color(0xFF757575);
+  static const _kBg = Color(0xFFF5F5F5);
+  static const _kEmerald = Color(0xFF2E7D32); // verde esmeralda
+  static const _kDark = Color(0xFF212121);
+  static const _kSubtle = Color(0xFF757575);
 
   @override
   Widget build(BuildContext context) {
@@ -243,9 +258,10 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
         ),
       ),
       body: SafeArea(
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : errorMessage.isNotEmpty
+        child:
+            isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : errorMessage.isNotEmpty
                 ? _buildError()
                 : _buildTerminalsList(),
       ),
@@ -259,7 +275,11 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_off_outlined, size: 64, color: Colors.grey.shade400),
+            Icon(
+              Icons.cloud_off_outlined,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
             const SizedBox(height: 16),
             Text(
               errorMessage,
@@ -274,7 +294,10 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
               style: OutlinedButton.styleFrom(
                 foregroundColor: _kEmerald,
                 side: const BorderSide(color: _kEmerald),
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -292,7 +315,11 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.devices_other_outlined, size: 56, color: Colors.grey.shade400),
+            Icon(
+              Icons.devices_other_outlined,
+              size: 56,
+              color: Colors.grey.shade400,
+            ),
             const SizedBox(height: 12),
             Text(
               'No hay terminales disponibles',
@@ -358,9 +385,7 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border(
-              left: BorderSide(color: accent, width: 5),
-            ),
+            border: Border(left: BorderSide(color: accent, width: 5)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
           child: Column(
@@ -386,7 +411,9 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: accent.withOpacity(0.10),
                       borderRadius: BorderRadius.circular(20),
@@ -428,14 +455,19 @@ class _TerminalSelectionScreenState extends State<TerminalSelectionScreen> {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(Icons.location_on_outlined,
-                        size: 14, color: Colors.grey.shade400),
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 14,
+                      color: Colors.grey.shade400,
+                    ),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
                         terminal.location!,
                         style: TextStyle(
-                            color: Colors.grey.shade500, fontSize: 11),
+                          color: Colors.grey.shade500,
+                          fontSize: 11,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),

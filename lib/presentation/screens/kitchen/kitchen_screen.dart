@@ -55,8 +55,10 @@ class _KitchenScreenState extends State<KitchenScreen>
     _loadOrders();
     _initWebSocket();
     // Polling como fallback (cada 15s en vez de 10 ya que WS es primario)
-    _pollTimer =
-        Timer.periodic(const Duration(seconds: 15), (_) => _loadOrders());
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _loadOrders(),
+    );
     _elapsedTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
@@ -85,10 +87,9 @@ class _KitchenScreenState extends State<KitchenScreen>
     for (final o in newOrders) {
       _orderTimers.putIfAbsent(
         o.id,
-        () => Timer.periodic(
-          const Duration(minutes: 1),
-          (_) { if (mounted) setState(() {}); },
-        ),
+        () => Timer.periodic(const Duration(minutes: 1), (_) {
+          if (mounted) setState(() {});
+        }),
       );
     }
   }
@@ -124,7 +125,11 @@ class _KitchenScreenState extends State<KitchenScreen>
         }
       },
       onDisconnected: () {
-        if (mounted) setState(() => _wsConnected = false);
+        if (mounted) {
+          setState(() {
+            _wsConnected = false;
+          });
+        }
       },
       onEvent: _handleReverbEvent,
       onError: (err) {
@@ -156,14 +161,19 @@ class _KitchenScreenState extends State<KitchenScreen>
       // El evento envía 'items' con {product_name, quantity, ...}
       // KitchenOrder espera 'order_details' con {product: {name}, quantity, ...}
       final rawItems = (orderData['items'] as List?) ?? [];
-      final normalizedItems = rawItems.map((item) => {
-        'id': item['id'] ?? 0,
-        'product': {'name': item['product_name'] ?? 'Producto'},
-        'quantity': item['quantity'] ?? 1,
-        'unit_price': item['unit_price'] ?? 0,
-        'notes': item['notes'],
-        'modifiers': item['modifiers'] ?? [],
-      }).toList();
+      final normalizedItems =
+          rawItems
+              .map(
+                (item) => {
+                  'id': item['id'] ?? 0,
+                  'product': {'name': item['product_name'] ?? 'Producto'},
+                  'quantity': item['quantity'] ?? 1,
+                  'unit_price': item['unit_price'] ?? 0,
+                  'notes': item['notes'],
+                  'modifiers': item['modifiers'] ?? [],
+                },
+              )
+              .toList();
 
       final newOrder = KitchenOrder.fromJson({
         ...orderData,
@@ -197,10 +207,9 @@ class _KitchenScreenState extends State<KitchenScreen>
   Future<void> _loadOrders() async {
     try {
       // Map 'active' to statuses that are 'En Curso'
-      String statusFilter = selectedTab == 'active' 
-          ? 'confirmed,preparing' 
-          : 'ready,delivered'; 
-      
+      String statusFilter =
+          selectedTab == 'active' ? 'confirmed,preparing' : 'ready,delivered';
+
       final restaurantId = await ConfigurationService.getRestaurantId();
       final response = await ApiService.fetchKitchenOrders(
         restaurantId: restaurantId,
@@ -234,7 +243,7 @@ class _KitchenScreenState extends State<KitchenScreen>
       }
     }
   }
-  
+
   Future<void> _advanceOrder(int orderId) async {
     final currentOrder = orders.firstWhere(
       (o) => o.id == orderId,
@@ -262,14 +271,12 @@ class _KitchenScreenState extends State<KitchenScreen>
             final idx = orders.indexWhere((o) => o.id == orderId);
             if (idx != -1) {
               // 4. Mover a la lista de completados con status 'ready'
-              completedOrders.insert(
-                  0, orders[idx].copyWith(status: 'ready'));
+              completedOrders.insert(0, orders[idx].copyWith(status: 'ready'));
               orders.removeAt(idx);
               _exitingOrderIds.remove(orderId);
               // 5. Actualizar contadores localmente
               if ((counts[currentOrder.status] ?? 0) > 0) {
-                counts[currentOrder.status] =
-                    counts[currentOrder.status]! - 1;
+                counts[currentOrder.status] = counts[currentOrder.status]! - 1;
               }
               counts['ready'] = (counts['ready'] ?? 0) + 1;
             }
@@ -290,9 +297,9 @@ class _KitchenScreenState extends State<KitchenScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -304,11 +311,12 @@ class _KitchenScreenState extends State<KitchenScreen>
     // Completed = ready + delivered
     final activeCount = (counts['confirmed'] ?? 0) + (counts['preparing'] ?? 0);
     final completedCount = (counts['ready'] ?? 0) + (counts['delivered'] ?? 0);
-    
+
     final posProvider = Provider.of<PosProvider>(context, listen: false);
-    final userName = context.read<AuthProvider>().userName.isNotEmpty
-        ? context.read<AuthProvider>().userName
-        : (posProvider.currentCashRegister?.user?.name ?? 'Usuario');
+    final userName =
+        context.read<AuthProvider>().userName.isNotEmpty
+            ? context.read<AuthProvider>().userName
+            : (posProvider.currentCashRegister?.user?.name ?? 'Usuario');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -349,181 +357,232 @@ class _KitchenScreenState extends State<KitchenScreen>
                       fontWeight: FontWeight.w400,
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 12),
                   // Selector con pastillas redondeadas
-                  SegmentedButton<String>(
-                    segments: [
-                      ButtonSegment(
-                        value: 'active',
-                        label: Text(
-                          activeCount > 0
-                              ? 'En Curso ($activeCount)'
-                              : 'En Curso',
-                        ),
-                      ),
-                      ButtonSegment(
-                        value: 'completed',
-                        label: Text(
-                          completedCount > 0
-                              ? 'Completados ($completedCount)'
-                              : 'Completados',
-                        ),
-                      ),
-                    ],
-                    selected: {selectedTab},
-                    onSelectionChanged: (newSelection) {
-                      setState(() {
-                        selectedTab = newSelection.first;
-                        isLoading = true;
-                      });
-                      _loadOrders();
-                    },
-                    showSelectedIcon: false,
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.selected)) {
-                          return const Color(0xFF1B1B1B);
-                        }
-                        return Colors.grey.shade100;
-                      }),
-                      foregroundColor: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.selected)) {
-                          return Colors.white;
-                        }
-                        return Colors.black54;
-                      }),
-                      shape: WidgetStateProperty.all(
-                        RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                      ),
-                      side: WidgetStateProperty.all(BorderSide.none),
-                      textStyle: WidgetStateProperty.all(
-                        const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  // ── Status de sincronización + WS ──
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Punto de estado WS
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _wsConnected
-                              ? Colors.green.shade400
-                              : Colors.orange.shade400,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        _secondsSinceSync < 15
-                            ? Icons.cloud_done_rounded
-                            : Icons.sync_rounded,
-                        size: 14,
-                        color: _secondsSinceSync < 15
-                            ? Colors.green.shade400
-                            : Colors.orange.shade400,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        _secondsSinceSync < 3
-                            ? _syncLabel
-                            : 'Hace ${_secondsSinceSync}s',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 16),
-                  // ── Avatar con menú: Cambiar Cocinero + Salir ──
-                  PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'switch') {
-                        _showQuickSwitchDialog(context);
-                      } else if (value == 'logout') {
-                        final auth = context.read<AuthProvider>();
-                        await auth.logout();
-                        if (mounted) {
-                          Navigator.of(context).pushNamedAndRemoveUntil(
-                            '/login',
-                            (route) => false,
-                          );
-                        }
-                      }
-                    },
-                    offset: const Offset(0, 50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        enabled: false,
-                        child: Text(
-                          userName,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w600,
+                  Expanded(
+                    flex: 4,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: SegmentedButton<String>(
+                        segments: [
+                          ButtonSegment(
+                            value: 'active',
+                            label: Text(
+                              activeCount > 0
+                                  ? 'En Curso ($activeCount)'
+                                  : 'En Curso',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(
-                        value: 'switch',
-                        child: Row(
-                          children: [
-                            Icon(Icons.swap_horiz_rounded, size: 20, color: Color(0xFF2196F3)),
-                            SizedBox(width: 12),
-                            Text('Cambiar Cocinero'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'logout',
-                        child: Row(
-                          children: [
-                            Icon(Icons.logout_rounded, size: 20, color: Color(0xFFE91E63)),
-                            SizedBox(width: 12),
-                            Text('Salir'),
-                          ],
-                        ),
-                      ),
-                    ],
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          userName,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                          ButtonSegment(
+                            value: 'completed',
+                            label: Text(
+                              completedCount > 0
+                                  ? 'Completados ($completedCount)'
+                                  : 'Completados',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        CircleAvatar(
-                          radius: 18,
-                          backgroundColor: const Color(0xFFE91E63),
-                          child: Text(
-                            userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                        ],
+                        selected: {selectedTab},
+                        onSelectionChanged: (newSelection) {
+                          setState(() {
+                            selectedTab = newSelection.first;
+                            isLoading = true;
+                          });
+                          _loadOrders();
+                        },
+                        showSelectedIcon: false,
+                        style: ButtonStyle(
+                          backgroundColor: WidgetStateProperty.resolveWith((
+                            states,
+                          ) {
+                            if (states.contains(WidgetState.selected)) {
+                              return const Color(0xFF1B1B1B);
+                            }
+                            return Colors.grey.shade100;
+                          }),
+                          foregroundColor: WidgetStateProperty.resolveWith((
+                            states,
+                          ) {
+                            if (states.contains(WidgetState.selected)) {
+                              return Colors.white;
+                            }
+                            return Colors.black54;
+                          }),
+                          shape: WidgetStateProperty.all(
+                            RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                          side: WidgetStateProperty.all(BorderSide.none),
+                          textStyle: WidgetStateProperty.all(
+                            const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
                             ),
                           ),
                         ),
-                      ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // ── Status de sincronización + WS ──
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 110),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Punto de estado WS
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color:
+                                  _wsConnected
+                                      ? Colors.green.shade400
+                                      : Colors.orange.shade400,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            _secondsSinceSync < 15
+                                ? Icons.cloud_done_rounded
+                                : Icons.sync_rounded,
+                            size: 14,
+                            color:
+                                _secondsSinceSync < 15
+                                    ? Colors.green.shade400
+                                    : Colors.orange.shade400,
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              _secondsSinceSync < 3
+                                  ? _syncLabel
+                                  : 'Hace ${_secondsSinceSync}s',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // ── Avatar con menú: Cambiar Cocinero + Salir ──
+                  Flexible(
+                    child: PopupMenuButton<String>(
+                      onSelected: (value) async {
+                        if (value == 'switch') {
+                          _showQuickSwitchDialog(context);
+                        } else if (value == 'logout') {
+                          final auth = context.read<AuthProvider>();
+                          await auth.logout();
+                          if (mounted) {
+                            Navigator.of(context).pushNamedAndRemoveUntil(
+                              '/login',
+                              (route) => false,
+                            );
+                          }
+                        }
+                      },
+                      offset: const Offset(0, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      itemBuilder:
+                          (context) => [
+                            PopupMenuItem(
+                              enabled: false,
+                              child: Text(
+                                userName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const PopupMenuDivider(),
+                            const PopupMenuItem(
+                              value: 'switch',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.swap_horiz_rounded,
+                                    size: 20,
+                                    color: Color(0xFF2196F3),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text('Cambiar Cocinero'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'logout',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.logout_rounded,
+                                    size: 20,
+                                    color: Color(0xFFE91E63),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text('Salir'),
+                                ],
+                              ),
+                            ),
+                          ],
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 150),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  userName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: const Color(0xFFE91E63),
+                                child: Text(
+                                  userName.isNotEmpty
+                                      ? userName[0].toUpperCase()
+                                      : 'U',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -532,105 +591,120 @@ class _KitchenScreenState extends State<KitchenScreen>
           ),
           // ── Body ──
           Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : error != null
+            child:
+                isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : error != null
                     ? Center(child: Text('Error: $error'))
                     : LayoutBuilder(
-                        builder: (context, constraints) {
-                          // Responsive: adaptar tarjetas al ancho disponible
-                          final w = constraints.maxWidth;
-                          final maxExtent = w >= 1200
-                              ? 260.0  // Desktop / tablet landscape → ~5 cols
-                              : w >= 800
-                                  ? 240.0  // Tablet portrait → ~3-4 cols
-                                  : 200.0; // Móvil → 2 cols
-                          final aspect = w >= 800 ? 0.55 : 0.50;
+                      builder: (context, constraints) {
+                        // Responsive: adaptar tarjetas al ancho disponible
+                        final w = constraints.maxWidth;
+                        final maxExtent =
+                            w >= 1200
+                                ? 260.0 // Desktop / tablet landscape → ~5 cols
+                                : w >= 800
+                                ? 240.0 // Tablet portrait → ~3-4 cols
+                                : 200.0; // Móvil → 2 cols
+                        final aspect = w >= 800 ? 0.55 : 0.50;
 
-                          // Lista activa o completada según tab seleccionado
-                          final displayOrders = selectedTab == 'active'
-                              ? orders
-                              : completedOrders;
+                        // Lista activa o completada según tab seleccionado
+                        final displayOrders =
+                            selectedTab == 'active' ? orders : completedOrders;
 
-                          return Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: GridView.builder(
-                              gridDelegate:
-                                  SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: maxExtent,
-                                childAspectRatio: aspect,
-                                crossAxisSpacing: 14,
-                                mainAxisSpacing: 14,
-                              ),
-                              itemCount: displayOrders.length,
-                              itemBuilder: (context, index) {
-                            final order = displayOrders[index];
-                            final isFresh = _freshOrderIds.contains(order.id);
-                            final isExiting = _exitingOrderIds.contains(order.id);
-                            return TweenAnimationBuilder<double>(
-                              key: ValueKey(
-                                'order_${order.id}_${isExiting ? 'exit' : isFresh ? 'enter' : 'idle'}',
-                              ),
-                              tween: Tween(
-                                begin: isExiting ? 1.0 : (isFresh ? 0.0 : 1.0),
-                                end: isExiting ? 0.0 : 1.0,
-                              ),
-                              duration: Duration(
-                                  milliseconds: isExiting ? 400 : 550),
-                              curve: isExiting
-                                  ? Curves.easeInBack
-                                  : Curves.easeOutBack,
-                              builder: (ctx, v, child) {
-                                return Opacity(
-                                  opacity: v.clamp(0.0, 1.0),
-                                  child: Transform.translate(
-                                    offset: isExiting
-                                        ? Offset((1.0 - v) * 60, 0)
-                                        : Offset(0, (1.0 - v) * -36),
-                                    child: Transform.scale(
-                                      scale: isExiting
-                                          ? (0.8 + v * 0.2)
-                                          : (0.85 + v * 0.15),
-                                      child: child,
+                        return Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: GridView.builder(
+                            gridDelegate:
+                                SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: maxExtent,
+                                  childAspectRatio: aspect,
+                                  crossAxisSpacing: 14,
+                                  mainAxisSpacing: 14,
+                                ),
+                            itemCount: displayOrders.length,
+                            itemBuilder: (context, index) {
+                              final order = displayOrders[index];
+                              final isFresh = _freshOrderIds.contains(order.id);
+                              final isExiting = _exitingOrderIds.contains(
+                                order.id,
+                              );
+                              return TweenAnimationBuilder<double>(
+                                key: ValueKey(
+                                  'order_${order.id}_${isExiting
+                                      ? 'exit'
+                                      : isFresh
+                                      ? 'enter'
+                                      : 'idle'}',
+                                ),
+                                tween: Tween(
+                                  begin:
+                                      isExiting ? 1.0 : (isFresh ? 0.0 : 1.0),
+                                  end: isExiting ? 0.0 : 1.0,
+                                ),
+                                duration: Duration(
+                                  milliseconds: isExiting ? 400 : 550,
+                                ),
+                                curve:
+                                    isExiting
+                                        ? Curves.easeInBack
+                                        : Curves.easeOutBack,
+                                builder: (ctx, v, child) {
+                                  return Opacity(
+                                    opacity: v.clamp(0.0, 1.0),
+                                    child: Transform.translate(
+                                      offset:
+                                          isExiting
+                                              ? Offset((1.0 - v) * 60, 0)
+                                              : Offset(0, (1.0 - v) * -36),
+                                      child: Transform.scale(
+                                        scale:
+                                            isExiting
+                                                ? (0.8 + v * 0.2)
+                                                : (0.85 + v * 0.15),
+                                        child: child,
+                                      ),
                                     ),
+                                  );
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 600),
+                                  curve: Curves.easeOut,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow:
+                                        isFresh
+                                            ? [
+                                              BoxShadow(
+                                                color: const Color(
+                                                  0xFFE91E63,
+                                                ).withOpacity(0.40),
+                                                blurRadius: 22,
+                                                spreadRadius: 3,
+                                              ),
+                                            ]
+                                            : [],
                                   ),
-                                );
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 600),
-                                curve: Curves.easeOut,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: isFresh
-                                      ? [
-                                          BoxShadow(
-                                            color: const Color(0xFFE91E63)
-                                                .withOpacity(0.40),
-                                            blurRadius: 22,
-                                            spreadRadius: 3,
-                                          ),
-                                        ]
-                                      : [],
+                                  child: KitchenOrderCard(
+                                    order: order,
+                                    onAdvance:
+                                        selectedTab == 'active'
+                                            ? () => _advanceOrder(order.id)
+                                            : null,
+                                  ),
                                 ),
-                                child: KitchenOrderCard(
-                                  order: order,
-                                  onAdvance: selectedTab == 'active'
-                                      ? () => _advanceOrder(order.id)
-                                      : null,
-                                ),
-                              ),
-                            );
-                              },
-                            ),
-                          );
-                        },
-                      ),
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    ),
           ),
         ],
       ),
     );
   }
-  
+
   // ── Quick Switch Dialog ──
   Future<void> _showQuickSwitchDialog(BuildContext ctx) async {
     final pinController = TextEditingController();
@@ -648,12 +722,16 @@ class _KitchenScreenState extends State<KitchenScreen>
               ),
               title: const Row(
                 children: [
-                  Icon(Icons.swap_horiz_rounded,
-                      color: Color(0xFFE91E63), size: 24),
+                  Icon(
+                    Icons.swap_horiz_rounded,
+                    color: Color(0xFFE91E63),
+                    size: 24,
+                  ),
                   SizedBox(width: 10),
-                  Text('Cambiar Cocinero',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w700)),
+                  Text(
+                    'Cambiar Cocinero',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
                 ],
               ),
               content: Column(
@@ -661,10 +739,7 @@ class _KitchenScreenState extends State<KitchenScreen>
                 children: [
                   Text(
                     'Ingresa el PIN del nuevo cocinero para cambiar de usuario sin cerrar sesión.',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                   ),
                   const SizedBox(height: 20),
                   TextField(
@@ -695,7 +770,9 @@ class _KitchenScreenState extends State<KitchenScreen>
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                         borderSide: const BorderSide(
-                            color: Color(0xFFE91E63), width: 2),
+                          color: Color(0xFFE91E63),
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
@@ -715,8 +792,10 @@ class _KitchenScreenState extends State<KitchenScreen>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogCtx),
-                  child: Text('Cancelar',
-                      style: TextStyle(color: Colors.grey.shade600)),
+                  child: Text(
+                    'Cancelar',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
                 ),
                 ElevatedButton(
                   onPressed: () async {
@@ -738,8 +817,7 @@ class _KitchenScreenState extends State<KitchenScreen>
                           setState(() {});
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(
-                                  'Bienvenido, ${auth.userName}'),
+                              content: Text('Bienvenido, ${auth.userName}'),
                               backgroundColor: const Color(0xFFE91E63),
                               behavior: SnackBarBehavior.floating,
                             ),
@@ -777,30 +855,25 @@ class _KitchenScreenState extends State<KitchenScreen>
   String _formatTime(DateTime dt) {
     return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
-
 }
 
 class KitchenOrderCard extends StatelessWidget {
   final KitchenOrder order;
   final VoidCallback? onAdvance;
 
-  const KitchenOrderCard({
-    super.key,
-    required this.order,
-    this.onAdvance,
-  });
+  const KitchenOrderCard({super.key, required this.order, this.onAdvance});
 
   /// Color de urgencia según tiempo transcurrido (semáforo de cocina)
   Color _urgencyColor(int elapsed) {
-    if (elapsed >= 11) return Colors.red.shade600;     // 🔴 Urgente
-    if (elapsed >= 6)  return Colors.orange.shade700;  // 🟠 Espera
-    return const Color(0xFF43A047);                    // 🟢 Nuevo
+    if (elapsed >= 11) return Colors.red.shade600; // 🔴 Urgente
+    if (elapsed >= 6) return Colors.orange.shade700; // 🟠 Espera
+    return const Color(0xFF43A047); // 🟢 Nuevo
   }
 
   /// Etiqueta textual del semáforo
   String _urgencyLabel(int elapsed) {
     if (elapsed >= 11) return 'URGENTE';
-    if (elapsed >= 6)  return 'ESPERA';
+    if (elapsed >= 6) return 'ESPERA';
     return 'NUEVO';
   }
 
@@ -833,82 +906,103 @@ class KitchenOrderCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // Orden + hora
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '#Orden ${order.id}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#Orden ${order.id}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.access_time_rounded,
-                            size: 13, color: Colors.grey.shade500),
-                        const SizedBox(width: 4),
-                        Text(
-                          timeStr,
-                          style: TextStyle(
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time_rounded,
+                            size: 13,
                             color: Colors.grey.shade500,
-                            fontSize: 12,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Badge de minutos transcurridos + etiqueta
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: color.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${elapsed}m',
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              timeStr,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 12,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _urgencyLabel(elapsed),
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                // Tipo de orden
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
+                          const SizedBox(width: 8),
+                          // Badge de minutos transcurridos + etiqueta
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${elapsed}m',
+                                  style: TextStyle(
+                                    color: color,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _urgencyLabel(elapsed),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: color,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  child: Text(
-                    order.orderTypeLabel,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
+                ),
+                const SizedBox(width: 10),
+                // Tipo de orden
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      order.orderTypeLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ),
@@ -984,27 +1078,32 @@ class KitchenOrderCard extends StatelessWidget {
                                   child: Wrap(
                                     spacing: 4,
                                     runSpacing: 4,
-                                    children: item.modifiers.map((m) {
-                                      return Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.shade50,
-                                          borderRadius: BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: Colors.orange.shade300,
-                                              width: 0.8),
-                                        ),
-                                        child: Text(
-                                          m,
-                                          style: TextStyle(
-                                            color: Colors.orange.shade800,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
+                                    children:
+                                        item.modifiers.map((m) {
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: Colors.orange.shade300,
+                                                width: 0.8,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              m,
+                                              style: TextStyle(
+                                                color: Colors.orange.shade800,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
                                   ),
                                 ),
                               if (item.notes != null)
@@ -1026,46 +1125,50 @@ class KitchenOrderCard extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: onAdvance,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE91E63),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE91E63),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
                   ),
+                  elevation: 0,
                 ),
-                elevation: 0,
-              ),
-              child: const Text(
-                'LISTO',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                  letterSpacing: 1.2,
+                child: const Text(
+                  'LISTO',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 
   Widget _buildNoteText(String note) {
-    final clean = note
-        .replaceAll('[PARA COMER AQUÍ]', '')
-        .replaceAll('[PARA LLEVAR]', '')
-        .trim();
+    final clean =
+        note
+            .replaceAll('[PARA COMER AQUÍ]', '')
+            .replaceAll('[PARA LLEVAR]', '')
+            .trim();
     if (clean.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.speaker_notes_outlined,
-              size: 12, color: Colors.red.shade400),
+          Icon(
+            Icons.speaker_notes_outlined,
+            size: 12,
+            color: Colors.red.shade400,
+          ),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
